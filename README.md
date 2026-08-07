@@ -247,6 +247,28 @@ Diese Pfade gehören **nicht** ins Git deiner Anwendungsprojekte.
 
 ---
 
+## Wieder entfernen
+
+```bash
+devhub down --alle
+devhub service uninstall
+npm unlink -g devhub          # falls per setup / npm link installiert
+# ggf. auch: npm unlink -g dev
+```
+
+Optional aufräumen:
+
+| Was | Pfad / Aktion |
+| --- | --- |
+| Cursor-Skill | `rm -rf ~/.cursor/skills/devhub` |
+| Globale Agent-Regeln | Block zwischen den `devhub`-Ankern in `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc`, `~/.codex/AGENTS.md` (oder die Dateien löschen, falls sie nur Hub-Inhalt hatten) |
+| Registry & State | `rm -rf ~/.config/devhub ~/.local/state/devhub` |
+| Projekt-Verträge | In jedem Repo den Block in `AGENTS.md` sowie lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` — oder pro Projekt `devhub forget <ordner>` (entfernt die Hub-Blöcke, behält den Slot gesperrt) |
+
+Das geklonte Repo-Verzeichnis kannst du danach einfach löschen. Ohne `service uninstall` würde launchd den Hub nach dem Löschen des Ordners weiter starten wollen und scheitern.
+
+---
+
 ## Entwickeln am Hub selbst
 
 ```bash
@@ -263,6 +285,11 @@ sowie in [AGENTS.md](AGENTS.md) (Hinweise für Agents in diesem Repo).
 ---
 
 ## FAQ
+
+### Wie deinstalliere ich devhub wieder?
+
+Siehe [Wieder entfernen](#wieder-entfernen): zuerst Server und launchd stoppen,
+dann optional Link, Skill, Regeln und Zustandsordner löschen.
 
 ### Warum nicht einfach immer `npm run dev`?
 
