@@ -1,0 +1,11 @@
+{
+  "profile": {
+    "default": [
+      {
+        "name": "web",
+        "rolle": "frontend",
+        "cmd": ["node", "server.js", "{port}"]
+      }
+    ]
+  }
+}

@@ -1,0 +1,180 @@
+import { chmodSync, closeSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { claudeHome, codexHome, cursorHome, hubLogFile } from './paths.js'
+import { describeProject } from './discovery.js'
+import { removeLaunchJson, writeLaunchJson, hookScript } from './adapters/claude.js'
+import { removeCursorRule, writeCursorRule } from './adapters/cursor.js'
+import { ensureGitignore, localContractText, portableContractText, removeBlock, writeBlock } from './adapters/contract.js'
+import { logLine, openLog } from './runners/process.js'
+import { readJson, writeJson } from './util/json.js'
+
+export function instancesOf(project) {
+  return Object.entries(project.profiles)
+    .map(([profile, specs]) => ({
+      profile,
+      entries: specs
+        .filter((spec) => spec.port)
+        .map((spec) => ({ name: spec.name, port: spec.port, url: spec.url, role: spec.role }))
+    }))
+    .filter((instance) => instance.entries.length)
+}
+
+function adressenKurz(instances) {
+  return instances
+    .flatMap(({ profile, entries }) =>
+      entries.map((e) => `${profile}/${e.name} → ${e.url ?? e.port ?? '—'}`)
+    )
+    .join(', ')
+}
+
+function hubLog(lines) {
+  const fd = openLog(hubLogFile)
+  try {
+    for (const line of lines) logLine(fd, line)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+function protokolliere(aktion, project, path, changes, extra = []) {
+  const lines = [`${aktion} ${project}`, ...extra]
+  for (const c of changes) {
+    const rel = c.file.startsWith(path) ? `.${c.file.slice(path.length)}` : c.file
+    const status = !c.changed ? 'gleich' : c.deleted ? 'gelöscht' : c.created ? 'neu' : 'geändert'
+    lines.push(`  ${status.padEnd(10)} ${rel}`)
+    if (c.action) lines.push(`             ${c.action}${c.detail ? ` — ${c.detail}` : ''}`)
+    if (c.backup) lines.push(`             Sicherung: ${c.backup}`)
+  }
+  hubLog(lines)
+  return lines
+}
+
+export function syncProject(registry, name, { dryRun = false } = {}) {
+  const project = describeProject(registry, name)
+  if (!project) throw new Error(`Projekt "${name}" ist unbekannt`)
+  if (!project.adopted) throw new Error(`"${name}" ist nicht aufgenommen`)
+
+  const instances = instancesOf(project)
+  const portable = portableContractText({ project: name })
+  const lokal = localContractText({ project: name, hubPort: registry.settings.hubPort, instances })
+  const changes = []
+
+  // Repo-tauglich: AGENTS.md ohne Ports. Lokal: Cursor-Regel + launch.json + gitignore.
+  changes.push({ adapter: 'neutral', ...writeBlock(join(project.path, 'AGENTS.md'), portable, { dryRun }) })
+  changes.push({
+    adapter: 'cursor',
+    ...writeCursorRule(join(project.path, '.cursor'), lokal, {
+      dryRun,
+      description: 'Lokale Dev-Server-Adressen (devhub, nicht committen)'
+    })
+  })
+  changes.push({ adapter: 'claude', ...writeLaunchJson(project.path, instances, { dryRun }) })
+  changes.push({ adapter: 'gitignore', ...ensureGitignore(project.path, { dryRun }) })
+
+  const altRegel = join(project.path, '.cursor', 'rules', 'devhub.mdc')
+  if (existsSync(altRegel)) {
+    if (!dryRun) unlinkSync(altRegel)
+    changes.push({
+      adapter: 'cursor',
+      file: altRegel,
+      changed: true,
+      deleted: true,
+      action: 'Datei gelöscht',
+      detail: 'Alte Regel mit Ports (oft im Repo) entfernt — ersetzt durch devhub.local.mdc'
+    })
+  }
+
+  const log = dryRun
+    ? []
+    : protokolliere('sync', name, project.path, changes, [
+        `  Slot ${project.slot} · ${adressenKurz(instances) || 'keine Ports'}`,
+        '  AGENTS.md: portabel (ohne Ports) · Rest lokal + gitignore'
+      ])
+
+  return { project: name, path: project.path, slot: project.slot, instances, changes, log }
+}
+
+/** Macht den Sync rückgängig: Hub-Blöcke und Hub-Dateien im Projekt entfernen. */
+export function unsyncProject(registry, name, { dryRun = false } = {}) {
+  const project = describeProject(registry, name)
+  if (!project) throw new Error(`Projekt "${name}" ist unbekannt`)
+
+  const changes = []
+  changes.push({ adapter: 'claude', ...removeLaunchJson(project.path, { dryRun }) })
+  changes.push({ adapter: 'neutral', ...removeBlock(join(project.path, 'AGENTS.md'), { dryRun }) })
+  changes.push({ adapter: 'cursor', ...removeCursorRule(join(project.path, '.cursor'), { dryRun }) })
+
+  const log = dryRun ? [] : protokolliere('unsync', name, project.path, changes)
+  return { project: name, path: project.path, changes, log }
+}
+
+export function syncAll(registry, { dryRun = false, only } = {}) {
+  const names = only ? [only] : Object.keys(registry.projects)
+  return names.map((name) => syncProject(registry, name, { dryRun }))
+}
+
+const GLOBAL_BLOCK = `## Dev-Server gehören devhub
+
+Auf diesem Rechner gehören alle Dev-Server dem lokalen Dienst \`devhub\`. **Starte
+nie selbst einen Dev-Server** — kein \`npm run dev\`, \`pnpm dev\`, \`vite\`,
+\`next dev\`, \`uvicorn\`, \`python -m http.server\`, \`docker compose up\`.
+
+Stattdessen:
+
+- \`dev status\` — was läuft, auf welcher Nummer
+- \`dev up <projekt>\` — startet abgekoppelt, wirkungslos wenn schon läuft
+- \`dev down <projekt>\` — stoppt die ganze Prozessgruppe
+- \`dev logs <projekt>\` — Ausgabe des Servers
+- http://localhost:4000 — Übersicht über alle Projekte
+
+Jedes Projekt hat eine feste Adresse der Form
+\`http://<anzeigename>.localhost:<port>\` (aus dem festgelegten Titel, nicht dem
+Ordner). Wer selbst startet, erzeugt einen zweiten Server auf einer anderen
+Nummer — der Unterschied fällt erst auf, wenn Daten fehlen.`
+
+export function syncGlobal({ dryRun = false, withHook = false } = {}) {
+  const changes = []
+  changes.push({ adapter: 'claude', ...writeBlock(join(claudeHome, 'CLAUDE.md'), GLOBAL_BLOCK, { dryRun }) })
+  changes.push({ adapter: 'cursor', ...writeCursorRule(cursorHome, GLOBAL_BLOCK, { dryRun }) })
+  changes.push({ adapter: 'codex', ...writeBlock(join(codexHome, 'AGENTS.md'), GLOBAL_BLOCK, { dryRun }) })
+
+  if (withHook) changes.push(installClaudeHook({ dryRun }))
+  if (!dryRun) {
+    hubLog([
+      'sync global',
+      ...changes.map((c) => {
+        const status = c.changed ? 'geschrieben' : 'gleich'
+        return `  ${status.padEnd(11)} ${c.file}${c.action ? ` — ${c.action}` : ''}`
+      })
+    ])
+  }
+  return changes
+}
+
+/**
+ * Der Hook wirkt unabhängig davon, was das Modell gerade denkt — deshalb ist er
+ * die Rückfallebene, wenn eine Regel im Kontext nicht reicht. Standardmäßig aus,
+ * weil er auch legitime Aufrufe abfängt.
+ */
+export function installClaudeHook({ dryRun = false } = {}) {
+  const script = join(claudeHome, 'hooks', 'devhub-kein-dev-server.sh')
+  const settingsFile = join(claudeHome, 'settings.json')
+
+  if (!dryRun) {
+    mkdirSync(join(claudeHome, 'hooks'), { recursive: true })
+    writeFileSync(script, hookScript('dev'), 'utf8')
+    chmodSync(script, 0o755)
+
+    const settings = readJson(settingsFile, {})
+    settings.hooks ??= {}
+    settings.hooks.PreToolUse ??= []
+    const already = settings.hooks.PreToolUse.some((h) =>
+      h.hooks?.some((inner) => inner.command?.includes('devhub-kein-dev-server'))
+    )
+    if (!already) {
+      settings.hooks.PreToolUse.push({ matcher: 'Bash', hooks: [{ type: 'command', command: script }] })
+      writeJson(settingsFile, settings)
+    }
+  }
+  return { adapter: 'claude', file: script, changed: true, action: 'Hook installiert', detail: settingsFile }
+}

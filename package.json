@@ -1,0 +1,20 @@
+{
+  "name": "devhub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lokaler Dienst, dem die Dev-Server aller Projekte gehören.",
+  "bin": {
+    "dev": "./bin/dev.js",
+    "devhub": "./bin/dev.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.js'",
+    "serve": "node bin/dev.js serve",
+    "serve:dev": "DEVHUB_INSTANCE=dev node bin/dev.js serve --port 4001"
+  },
+  "license": "UNLICENSED"
+}

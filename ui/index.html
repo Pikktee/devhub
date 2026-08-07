@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>devhub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip" href="#inhalt">Zum Inhalt springen</a>
+
+<div class="rahmen">
+
+<header class="kopf">
+  <div class="kopf-zeile">
+    <div class="kopf-marke">
+      <a class="marke" href="/" data-route="/" title="Zur Übersicht">
+        <img class="logo" src="/logo.svg" alt="" width="28" height="28">
+        <div class="marke-text">
+          <h1>devhub</h1>
+          <span class="adresse" id="hub-adresse">localhost</span>
+        </div>
+      </a>
+    </div>
+    <div class="kopf-aktionen">
+      <button class="knopf gefahr" data-aktion="alle-stoppen" title="Alle laufenden Server stoppen">Alle stoppen</button>
+    </div>
+  </div>
+
+  <nav class="krume" id="krume" hidden aria-label="Pfad"></nav>
+</header>
+
+<div id="inhalt">
+  <main id="uebersicht">
+    <div class="filter" role="toolbar" aria-label="Filter">
+      <div class="filter-chips">
+        <button class="chip" data-filter="alle" aria-pressed="true">Alle</button>
+        <button class="chip" data-filter="laufend" aria-pressed="false">Laufend</button>
+        <button class="chip" data-filter="gestoppt" aria-pressed="false">Gestoppt</button>
+        <button class="chip chip-neben" data-filter="ohne-port" aria-pressed="false" title="Projekte ohne zugewiesenen Slot">Ohne Port</button>
+      </div>
+      <label class="suche-feld">
+        <span class="suche-icon" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <input class="suche" id="suche" type="search" placeholder="Projekt filtern …" autocomplete="off" spellcheck="false" aria-label="Projekt filtern">
+        <kbd class="suche-taste" aria-hidden="true">/</kbd>
+      </label>
+    </div>
+    <div class="liste" id="liste"><div class="laden" aria-busy="true">lädt …</div></div>
+    <div id="kandidaten"></div>
+  </main>
+
+  <main id="detail" hidden></main>
+
+  <main id="log" hidden></main>
+</div>
+
+</div>
+
+<footer class="fuss" id="fuss" aria-live="polite"></footer>
+
+<div id="meldung" role="status" aria-live="polite"></div>
+
+<dialog id="protokoll" class="protokoll">
+  <form method="dialog" class="protokoll-kopf">
+    <h2 id="protokoll-titel">Protokoll</h2>
+    <button class="knopf leise" value="ok" aria-label="Schließen">Schließen</button>
+  </form>
+  <pre class="protokoll-text" id="protokoll-text"></pre>
+</dialog>
+
+<dialog id="datei" class="datei-dialog" aria-labelledby="datei-titel">
+  <form method="dialog" class="datei-kopf">
+    <div class="datei-kopf-text">
+      <h2 id="datei-titel">Datei</h2>
+      <p class="datei-pfad" id="datei-pfad"></p>
+    </div>
+    <button class="knopf leise" value="ok" aria-label="Schließen">Schließen</button>
+  </form>
+  <div class="datei-koerper" id="datei-koerper"></div>
+</dialog>
+
+<dialog id="bestaetigung" class="bestaetigung" aria-labelledby="bestaetigung-titel">
+  <form method="dialog" id="bestaetigung-form">
+    <div class="bestaetigung-kopf">
+      <h2 id="bestaetigung-titel">Bestätigen</h2>
+      <p class="bestaetigung-text" id="bestaetigung-text"></p>
+    </div>
+    <ul class="bestaetigung-liste" id="bestaetigung-liste"></ul>
+    <label class="bestaetigung-option" id="bestaetigung-option">
+      <input type="checkbox" id="bestaetigung-clean" name="cleanDeps">
+      <span class="bestaetigung-option-text">
+        <span class="bestaetigung-option-titel">Auch Abhängigkeiten löschen</span>
+        <span class="bestaetigung-option-hint" id="bestaetigung-clean-hint">node_modules, .next und ähnliche Caches</span>
+      </span>
+    </label>
+    <div class="bestaetigung-aktionen">
+      <button type="submit" class="knopf gefahr fest" value="ok" id="bestaetigung-ok">Slot entfernen</button>
+      <button type="submit" class="knopf leise" value="cancel">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="eingabe" class="bestaetigung eingabe-dialog" aria-labelledby="eingabe-titel">
+  <form method="dialog" id="eingabe-form">
+    <div class="bestaetigung-kopf">
+      <h2 id="eingabe-titel">Eingabe</h2>
+      <p class="bestaetigung-text" id="eingabe-text" hidden></p>
+    </div>
+    <label class="eingabe-feld">
+      <span class="eingabe-label" id="eingabe-label">Wert</span>
+      <input type="text" id="eingabe-wert" name="wert" autocomplete="off" spellcheck="false">
+      <span class="eingabe-hint" id="eingabe-hint" hidden></span>
+    </label>
+    <div class="bestaetigung-aktionen">
+      <button type="submit" class="knopf primaer" value="ok" id="eingabe-ok">Speichern</button>
+      <button type="submit" class="knopf leise" value="cancel">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
