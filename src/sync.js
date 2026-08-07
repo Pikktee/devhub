@@ -123,21 +123,23 @@ Coding-Agenten starten **keine** eigenen Instanzen.
 \`uvicorn\`, \`python -m http.server\`, \`docker compose up\`, \`npx serve\` —
 auch nicht „kurz zum Testen“.
 
-### Stattdessen (CLI \`dev\`)
-1. \`dev status\` — läuft etwas, welche URL/Ports?
-2. \`dev up <ordner>\` — startet abgekoppelt (Ordnername unter ~/Dev, z. B. \`journey\`, nicht der Anzeigename).
-3. \`dev down <ordner>\` — stoppt die **ganze** Prozessgruppe (Frontend+API).
-4. \`dev logs <ordner>\` — Log lesen bei Fehlern.
-5. Übersicht: http://localhost:4000
+### Stattdessen (CLI \`devhub\`)
+1. \`devhub status\` — läuft etwas, welche URL/Ports?
+2. \`devhub up <ordner>\` — startet abgekoppelt (Ordnername unter ~/Dev, z. B. \`journey\`, nicht der Anzeigename).
+3. \`devhub down <ordner>\` — stoppt die **ganze** Prozessgruppe (Frontend+API).
+4. \`devhub logs <ordner>\` — Log lesen bei Fehlern.
+5. Übersicht: http://devhub.localhost:4000
 
 ### Adressen
 Die URL kommt aus dem **Anzeigenamen** (\`http://maptale.localhost:5120\`),
-der CLI-Schlüssel bleibt der **Ordner** (\`dev up journey\`). Bei \`dev status\`
-steht beides. Wer selbst startet, erzeugt leicht einen zweiten Server auf einer
-anderen Nummer — der Unterschied fällt erst auf, wenn Login/Daten fehlen.
+der CLI-Schlüssel bleibt der **Ordner** (\`devhub up journey\`). Bei \`devhub status\`
+steht beides. **Backend-URLs nie aus Anzeige-Host + Port zusammenbasteln** —
+die stehen bei \`devhub status <ordner>\` unter Prozesse (meist \`http://127.0.0.1:…\`).
+Wer selbst startet, erzeugt leicht einen zweiten Server auf einer anderen
+Nummer — der Unterschied fällt erst auf, wenn Login/Daten fehlen.
 
 ### Mehrere Prozesse
-Ein \`dev up\` startet alle Rollen des Profils (z. B. web+api). Nicht nur das
+Ein \`devhub up\` startet alle Rollen des Profils (z. B. web+api). Nicht nur das
 Frontend von Hand nachziehen.`
 
 export function syncGlobal({ dryRun = false, withHook = false } = {}) {
@@ -154,6 +156,7 @@ export function syncGlobal({ dryRun = false, withHook = false } = {}) {
   changes.push({ adapter: 'codex', ...writeBlock(join(codexHome, 'AGENTS.md'), GLOBAL_BLOCK, { dryRun }) })
 
   if (withHook) changes.push(installClaudeHook({ dryRun }))
+
   if (!dryRun) {
     hubLog([
       'sync global',
@@ -177,7 +180,7 @@ export function installClaudeHook({ dryRun = false } = {}) {
 
   if (!dryRun) {
     mkdirSync(join(claudeHome, 'hooks'), { recursive: true })
-    writeFileSync(script, hookScript('dev'), 'utf8')
+    writeFileSync(script, hookScript('devhub'), 'utf8')
     chmodSync(script, 0o755)
 
     const settings = readJson(settingsFile, {})

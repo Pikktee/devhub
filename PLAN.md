@@ -28,7 +28,7 @@ Jedes Projekt hat einen festen Port und eine feste Adresse. Die Dev-Server
 gehören einem kleinen Dienst unter launchd — nicht einer IDE, nicht einer
 Agent-Session, nicht einer Shell. Coding-Agenten (Claude Code, Cursor, Codex,
 u. a.) starten nie wieder selbst etwas, sondern hängen sich an bzw. rufen nur
-`dev up`/`dev status` auf. Ein Übersichtsfenster auf `http://localhost:4000`
+`devhub up`/`devhub status` auf. Ein Übersichtsfenster auf `http://devhub.localhost:4000`
 zeigt Server **und** projektbezogene Agent-Kontexte und schaltet die Server.
 
 Der Hub ist agent-neutral. Agent-spezifische Dateien (z. B.
@@ -41,7 +41,7 @@ Umgesetzt: Etappen 1, 2, 3, 5, 6 und 7. Bedienung in [README.md](README.md).
 Was noch aussteht, ist bewusst nichts Gebautes:
 
 - **Etappe 4 (Feldtest)** — läuft erst, wenn Projekte aufgenommen sind.
-- **Aufnahme der Projekte.** Die Registry ist leer; `dev adopt` und `dev sync`
+- **Aufnahme der Projekte.** Die Registry ist leer; `devhub adopt` und `devhub sync`
   ändern erst etwas, wenn sie aufgerufen werden. Kein Projekt wurde angefasst.
 - **Leerlauf-Abschaltung** (optional, Etappe 6) — erst nach dem Feldtest.
 
@@ -139,7 +139,7 @@ kein `preview_start`. Für sie reicht der Vertrag „Server nur über `dev`“ i
 Node ohne Abhängigkeiten. Projektdoku agent-neutral (`AGENTS.md`); optional
 zusätzlich `CLAUDE.md`, falls Claude Code das Repo selbst bearbeitet.
 
-`dev up [projekt] [--profil smoke]` · `dev down` · `dev status` · `dev logs` · `dev ports`
+`devhub up [projekt] [--profil smoke]` · `devhub down` · `devhub status` · `devhub logs` · `devhub ports`
 
 Was drinstecken muss:
 
@@ -157,7 +157,7 @@ Was drinstecken muss:
 - **Runner `process`** reicht hier. `compose` und `static` kommen in Etappe 6.
 
 *Fertig, wenn Journey mit beiden Profilen (vier Prozesse) startet und stoppt,
-`dev up` zweimal hintereinander nichts kaputt macht und die Server einen
+`devhub up` zweimal hintereinander nichts kaputt macht und die Server einen
 Neustart der Claude-App **oder** von Cursor überleben.*
 
 ### Etappe 3 — Dauerbetrieb und Agent-Adapter (klein)
@@ -166,11 +166,11 @@ Neustart der Claude-App **oder** von Cursor überleben.*
   Der Hub ist das Einzige, dessen Dauerbetrieb sich rechtfertigt: winzig, kein
   Projektcode.
 - **Gemeinsamer Vertrag** (agent-neutral): „Dev-Server nie selbst starten —
-  `dev up` / `dev status` / Hub-UI.“ Liegt in einer kurzen Vorlage, die
-  `dev sync` in projektlokale `AGENTS.md`-Abschnitte und/oder Cursor-Rules
+  `devhub up` / `devhub status` / Hub-UI.“ Liegt in einer kurzen Vorlage, die
+  `devhub sync` in projektlokale `AGENTS.md`-Abschnitte und/oder Cursor-Rules
   einspielen kann (idempotent, markiert mit HTML-Kommentar-Anker).
 - **Adapter Claude Code** (optional, aber zuerst, weil gemessen):
-  - `dev sync` schreibt `.claude/launch.json` (reine Attach-Einträge).
+  - `devhub sync` schreibt `.claude/launch.json` (reine Attach-Einträge).
   - Globale Regel in `~/.claude/CLAUDE.md`.
   - Falls Regeln nicht reichen: PreToolUse-Hook auf Bash gegen `npm run dev` & Co.
 - **Adapter Cursor / Codex / andere**: kein Generated-File nötig. Nur der
@@ -189,7 +189,7 @@ zu korrigieren als nach der Oberfläche.
 
 ### Etappe 5 — Die Übersichtsseite
 
-`http://localhost:4000`, serviert vom selben Dienst. Mockups liegen unter
+`http://devhub.localhost:4000`, serviert vom selben Dienst. Mockups liegen unter
 [mockups/](mockups/). Sie ist nur noch eine Ansicht auf Kommandos, die es schon
 gibt — deshalb steht sie hier und nicht vorn.
 
@@ -208,7 +208,7 @@ Restliche Projekte einsammeln, dazu die zwei fehlenden Runner:
 - **`static`** (konzepte, vonnis-testcoding 1+2 u. a.): ausgeliefert von
   `bin/static-serve.js` statt von je einem `python3 -m http.server`.
   *Abweichung vom Plan:* der Hub liefert nicht in-process aus. Das hätte
-  bedeutet, dass `dev up` für statische Projekte einen laufenden Hub voraussetzt
+  bedeutet, dass `devhub up` für statische Projekte einen laufenden Hub voraussetzt
   und Listener zur Laufzeit auf- und abgebaut werden — viel Sonderfall für einen
   gesparten Prozess. So bleibt die Zustandsführung für alle Runner dieselbe.
 
@@ -235,9 +235,9 @@ Kontextwechsel. Das ist komplementär zu Ports/Prozessen, kein Ersatz.
 
 UI: im Projekt-Detail ein Reiter **Agenten** — erkannte Dateien als Liste mit
 Kurzinfo (Pfad, Größe, mtime), Vorschau des Inhalts, Badge welcher Agent die
-Datei vermutlich liest. Optional CLI: `dev agents [projekt]`.
+Datei vermutlich liest. Optional CLI: `devhub agents [projekt]`.
 
-**Eine Ausnahme vom Lesemodus: `dev link`.** Wenn `AGENTS.md` und `CLAUDE.md`
+**Eine Ausnahme vom Lesemodus: `devhub link`.** Wenn `AGENTS.md` und `CLAUDE.md`
 nebeneinander als Kopien liegen, laufen sie auseinander — dann gilt für Claude
 etwas anderes als für Cursor. Der Hub darf sie verknüpfen, aber nur, wo das
 nachweislich verlustfrei ist (nur eine Datei vorhanden, oder beide inhaltlich
@@ -291,7 +291,7 @@ aber für jeden Agenten, der Dev-Server in seiner Session/IDE startet:
 | --- | --- | --- |
 | Feste Ports / Registry | ja | reine Hub-Sache |
 | Detached unter launchd | ja | überlebt Claude-, Cursor- und Terminal-Neustart |
-| CLI `dev up/down/status` | ja | jeder Agent mit Shell kann das |
+| CLI `devhub up/down/status` | ja | jeder Agent mit Shell kann das |
 | `*.localhost`-Adressen | ja | OS-Ebene |
 | Übersicht UI | ja | Browser |
 | Attach-Datei ohne Startkommando | nein — Claude | Adapter `launch.json` |

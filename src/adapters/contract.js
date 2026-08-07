@@ -14,18 +14,18 @@ export const GITIGNORE_END = '# <<< devhub'
 export function portableContractText({ project }) {
   return `## Dev-Server und devhub
 
-Falls auf diesem Rechner das CLI \`dev\` (devhub) verfügbar ist, gehören die
+Falls auf diesem Rechner das CLI \`devhub\` verfügbar ist, gehören die
 Dev-Server diesem Dienst. **Nicht** mit \`npm run dev\`, \`pnpm dev\`, \`vite\`,
 \`next dev\`, \`uvicorn\`, \`python -m http.server\`, \`docker compose up\` oder
 \`npx serve\` starten — sonst läuft leicht ein zweiter Server auf einer anderen
 Nummer.
 
-Vor dem Öffnen der App: \`dev status ${project}\`. Starten nur mit
-\`dev up ${project}\` (Ordnername), stoppen mit \`dev down ${project}\`, Log mit
-\`dev logs ${project}\`. Ein Aufruf startet alle Rollen (Frontend und API, falls
-vorhanden).
+Vor dem Öffnen der App: \`devhub status ${project}\`. Starten nur mit
+\`devhub up ${project}\` (Ordnername), stoppen mit \`devhub down ${project}\`, Log mit
+\`devhub logs ${project}\`. Ein Aufruf startet alle Rollen (Frontend und API, falls
+vorhanden). Kurzform \`dev\` ist Alias.
 
-Ohne \`dev\` / ohne Hub: Server wie im Projekt üblich starten.`
+Ohne \`devhub\` / ohne Hub: Server wie im Projekt üblich starten.`
 }
 
 /** Nur lokal (gitignoriert): feste Ports und URLs dieses Rechners. */
@@ -45,8 +45,8 @@ Diese Datei ist lokal und sollte nicht committed werden. Ports gelten nur hier.
 | --- | --- |
 ${rows || '| — | — |'}
 
-- \`dev status ${project}\` · \`dev up ${project}\` · \`dev down ${project}\` · \`dev logs ${project}\`
-- Übersicht: http://localhost:${hubPort}
+- \`devhub status ${project}\` · \`devhub up ${project}\` · \`devhub down ${project}\` · \`devhub logs ${project}\`
+- Übersicht: http://devhub.localhost:${hubPort}
 - CLI-Schlüssel ist der **Ordner** \`${project}\`; die URL folgt dem Anzeigenamen.
 
 **Nicht** selbst \`npm run dev\` / \`vite\` / \`next dev\` / \`uvicorn\` / \`npx serve\` o. Ä. starten.`

@@ -74,7 +74,7 @@ export async function uninstallService() {
 
 export function serviceStatus() {
   if (!existsSync(plistFile)) {
-    return { installed: false, loaded: false, summary: 'nicht eingerichtet ("dev service install")' }
+    return { installed: false, loaded: false, summary: 'nicht eingerichtet ("devhub service install")' }
   }
   const printed = launchctl(['print', `${domain}/${launchdLabel}`])
   if (!printed.ok) return { installed: true, loaded: false, summary: 'plist vorhanden, aber nicht geladen', plist: plistFile }

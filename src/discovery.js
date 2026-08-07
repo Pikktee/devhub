@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { readJson } from './util/json.js'
-import { portFor, slugifyLabel, urlFor } from './ports.js'
+import { portFor, slugifyLabel, urlForRole } from './ports.js'
 import { repoRoot } from './paths.js'
 import { githubInfoFor } from './git.js'
 
@@ -251,10 +251,10 @@ function diagnose(dir, stack) {
   }
 
   if (unterprojekte.length >= 2) {
-    return `Sammelordner mit ${unterprojekte.length} Unterprojekten — einzeln aufnehmen, z. B. "dev adopt ${basename(dir)}/${unterprojekte[0]}"`
+    return `Sammelordner mit ${unterprojekte.length} Unterprojekten — einzeln aufnehmen, z. B. "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
   }
   if (unterprojekte.length === 1) {
-    return `Startbares liegt in ${unterprojekte[0]}/ — "dev adopt ${basename(dir)}/${unterprojekte[0]}"`
+    return `Startbares liegt in ${unterprojekte[0]}/ — "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
   }
   return 'Kein Server erkennbar — falls doch einer laufen soll, dev.json anlegen'
 }
@@ -520,7 +520,7 @@ export function describeProject(registry, name) {
       return {
         ...spec,
         port,
-        url: port === undefined ? undefined : urlFor(hostLabel, profile, port, suffix)
+        url: port === undefined ? undefined : urlForRole(spec.role, hostLabel, profile, port, suffix)
       }
     })
   }

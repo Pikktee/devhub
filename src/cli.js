@@ -104,11 +104,12 @@ async function cmdStatus(positionals, flags) {
   const names = only ? [only] : Object.keys(registry.projects)
 
   if (!names.length) {
-    console.log('Noch kein Projekt aufgenommen. "dev list" zeigt die Kandidaten, "dev adopt <projekt>" vergibt einen Slot.')
+    console.log('Noch kein Projekt aufgenommen. "devhub list" zeigt die Kandidaten, "devhub adopt <projekt>" vergibt einen Slot.')
     return
   }
 
   const rows = []
+  const details = []
   let running = 0
   for (const name of names.sort((a, b) => a.localeCompare(b, 'de'))) {
     const status = await statusOf(registry, name, { withMemory: Boolean(flags.all) })
@@ -131,10 +132,22 @@ async function cmdStatus(positionals, flags) {
         ports,
         profile.state === 'gestoppt' ? color.dim('—') : since
       ])
+      if (only) {
+        for (const proc of profile.processes) {
+          details.push(
+            `  ${proc.name.padEnd(8)} ${String(proc.role).padEnd(9)} ${proc.url ?? '—'}` +
+              (proc.listening === false && profile.state !== 'gestoppt' ? color.dim(' (nicht erreichbar)') : '')
+          )
+        }
+      }
     }
   }
 
   console.log(table(rows, { head: ['', 'PROJEKT', 'PROFIL', 'ZUSTAND', 'ADRESSE', 'PORTS', 'SEIT'] }))
+  if (details.length) {
+    console.log(color.dim('\nProzesse'))
+    for (const line of details) console.log(line)
+  }
   if (!only) console.log(color.dim(`\n${names.length} aufgenommen · ${running} laufen`))
 }
 
@@ -167,7 +180,7 @@ async function cmdDown(positionals, flags) {
     return
   }
   const name = resolveName(registry, positionals[0])
-  if (!name) return fail('Kein Projekt angegeben. "dev down --alle" stoppt alles.')
+  if (!name) return fail('Kein Projekt angegeben. "devhub down --alle" stoppt alles.')
   const result = await down(name, { profile: flags.profile ?? 'default', registry })
   if (!result.known) return console.log(`${name}/${flags.profile ?? 'default'} war nicht als laufend vermerkt.`)
   console.log(`${color.dim('○')} ${name}/${result.profile} gestoppt (${result.stopped.join(', ') || 'nichts'})`)
@@ -247,7 +260,7 @@ async function cmdList() {
   const favorites = projects.filter((p) => p.favorite).length
   console.log(
     color.dim(
-      `\n${projects.length - open} aufgenommen · ${open} ohne Slot · ${favorites} Favorit${favorites === 1 ? '' : 'en'} ("dev adopt <projekt>")`
+      `\n${projects.length - open} aufgenommen · ${open} ohne Slot · ${favorites} Favorit${favorites === 1 ? '' : 'en'} ("devhub adopt <projekt>")`
     )
   )
 }
@@ -295,7 +308,7 @@ async function cmdAdopt(positionals, flags) {
   }
   console.log(color.dim(`  Quelle: ${project.source}`))
   for (const problem of project.problems) console.warn(color.yellow('  ! ') + problem)
-  console.log(color.dim(`\n"dev sync --projekt ${name}" schreibt den Vertrag in die Agent-Dateien.`))
+  console.log(color.dim(`\n"devhub sync --projekt ${name}" schreibt den Vertrag in die Agent-Dateien.`))
 }
 
 async function cmdForget(positionals, flags) {
@@ -453,7 +466,7 @@ async function cmdLink(positionals, flags) {
     const offen = rows.filter((r) => r[0] === color.yellow('·')).length
     console.log(
       color.dim(
-        `\n${offen} Projekt${offen === 1 ? '' : 'e'} könnten verknüpft werden: "dev link <projekt>" oder "dev link --alle".` +
+        `\n${offen} Projekt${offen === 1 ? '' : 'e'} könnten verknüpft werden: "devhub link <projekt>" oder "devhub link --alle".` +
           '\nNur anzeigen — es wurde nichts geändert.'
       )
     )
@@ -587,7 +600,7 @@ async function cmdOpen(positionals, flags) {
     return
   }
   if (!name) {
-    spawn('open', [`http://localhost:${registry.settings.hubPort}`], { detached: true, stdio: 'ignore' }).unref()
+    spawn('open', [`http://devhub.localhost:${registry.settings.hubPort}`], { detached: true, stdio: 'ignore' }).unref()
     return
   }
   const project = describeProject(registry, name)
@@ -600,26 +613,27 @@ async function cmdOpen(positionals, flags) {
 // ---------------------------------------------------------------- help
 
 const HELP = `devhub — die Dev-Server gehören dem Hub, nicht der Sitzung
+  Kurzform: dev (Alias)
 
-  dev status [projekt]              was läuft, auf welcher Nummer
-  dev up <projekt> [--profil p]     abgekoppelt starten (idempotent)
-  dev down <projekt> | --alle       Prozessgruppe stoppen
-  dev restart <projekt>             stoppen und starten
-  dev logs <projekt> [-f] [-n 40]   Ausgabe des Servers
-  dev ports                         Slot- und Portvergabe
-  dev list                          alle erkannten Projekte
-  dev adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
-  dev forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; Agent-Blöcke werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
-  dev favorite <projekt>            Favorit setzen/umschalten (--aus zum Entfernen)
-  dev unfavorite <projekt>          Favorit entfernen
-  dev sync [--projekt x] [--global] Agent-Dateien schreiben (--probelauf zeigt nur)
-  dev agents [projekt]              Regeln, Skills und Memory des Projekts
-  dev link [projekt] [--alle]       AGENTS.md und CLAUDE.md verknüpfen (ohne Argument: Bericht)
-  dev doctor                        Kollisionen und Ungereimtheiten
-  dev serve [--port 4000]           Hub im Vordergrund
-  dev service install|uninstall     launchd-Dienst
-  dev open [projekt]                im Browser öffnen (--finder / --ordner: Ordner im Finder)
-  dev reveal <projekt>              Projektordner im Finder zeigen
+  devhub status [projekt]              was läuft, auf welcher Nummer
+  devhub up <projekt> [--profil p]     abgekoppelt starten (idempotent)
+  devhub down <projekt> | --alle       Prozessgruppe stoppen
+  devhub restart <projekt>             stoppen und starten
+  devhub logs <projekt> [-f] [-n 40]   Ausgabe des Servers
+  devhub ports                         Slot- und Portvergabe
+  devhub list                          alle erkannten Projekte
+  devhub adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
+  devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; Agent-Blöcke werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
+  devhub favorite <projekt>            Favorit setzen/umschalten (--aus zum Entfernen)
+  devhub unfavorite <projekt>          Favorit entfernen
+  devhub sync [--projekt x] [--global] Agent-Dateien schreiben (--probelauf zeigt nur)
+  devhub agents [projekt]              Regeln, Skills und Memory des Projekts
+  devhub link [projekt] [--alle]       AGENTS.md und CLAUDE.md verknüpfen (ohne Argument: Bericht)
+  devhub doctor                        Kollisionen und Ungereimtheiten
+  devhub serve [--port 4000]           Hub im Vordergrund
+  devhub service install|uninstall     launchd-Dienst
+  devhub open [projekt]                im Browser öffnen (--finder / --ordner: Ordner im Finder)
+  devhub reveal <projekt>              Projektordner im Finder zeigen
 
 Ports: Frontend 51NN, Backend 87NN, NN = Slot. Adressen: <projekt>.localhost:<port>.
 `

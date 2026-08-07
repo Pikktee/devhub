@@ -4,7 +4,7 @@ import { logDir, repoRoot } from './paths.js'
 import * as registryStore from './registry.js'
 import * as stateStore from './state.js'
 import { describeProject } from './discovery.js'
-import { hostFor, portFor, urlFor } from './ports.js'
+import { hostFor, portFor, urlFor, urlForRole } from './ports.js'
 import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, probePort } from './probe.js'
 import { logLine, openLog, startProcess, stopGroup } from './runners/process.js'
 import { composeDown, composeServices, composeUp, dockerAvailable } from './runners/compose.js'
@@ -15,11 +15,11 @@ function requireInstance(registry, name, profile) {
   const project = describeProject(registry, name)
   if (!project) throw new Error(`Projekt "${name}" ist unbekannt`)
   if (!project.adopted) {
-    throw new Error(`"${name}" ist nicht aufgenommen — "dev adopt ${name}" vergibt einen Slot`)
+    throw new Error(`"${name}" ist nicht aufgenommen — "devhub adopt ${name}" vergibt einen Slot`)
   }
   const slot = profile === 'default' ? project.slot : project.profileSlots[profile]
   if (slot === undefined) {
-    throw new Error(`Profil "${profile}" von ${name} hat keinen Slot — "dev adopt ${name} --profil ${profile}"`)
+    throw new Error(`Profil "${profile}" von ${name} hat keinen Slot — "devhub adopt ${name} --profil ${profile}"`)
   }
   const specs = project.profiles[profile]
   if (!specs?.length) {
@@ -45,7 +45,7 @@ function varsFor({ project, profile, spec, port, registry, slot }) {
     profil: profile,
     profile,
     host: hostFor(label, profile, suffix),
-    url: urlFor(label, profile, port, suffix),
+    url: urlForRole(spec.role, label, profile, port, suffix),
     frontendUrl: urlFor(label, profile, frontendPort, suffix),
     backendUrl: `http://127.0.0.1:${backendPort}`,
     rolle: spec.role,

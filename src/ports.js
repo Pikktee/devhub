@@ -54,3 +54,12 @@ export function hostFor(label, profile = 'default', suffix = 'localhost') {
 export function urlFor(label, profile, port, suffix = 'localhost') {
   return `http://${hostFor(label, profile, suffix)}:${port}`
 }
+
+/**
+ * Backend-URLs bewusst als 127.0.0.1 — `localhost` kann auf ::1 zeigen, viele
+ * APIs lauschen nur auf IPv4. Frontend behält den Anzeige-Host.
+ */
+export function urlForRole(role, label, profile, port, suffix = 'localhost') {
+  if (role === 'backend') return `http://127.0.0.1:${port}`
+  return urlFor(label, profile, port, suffix)
+}

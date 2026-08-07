@@ -11,7 +11,7 @@ import { readJson } from '../util/json.js'
 export function launchJsonFor(instances) {
   return {
     version: '0.0.1',
-    _hinweis: 'Von devhub erzeugt. Nur Attach-Einträge — nicht von Hand ändern, "dev sync" überschreibt.',
+    _hinweis: 'Von devhub erzeugt. Nur Attach-Einträge — nicht von Hand ändern, "devhub sync" überschreibt.',
     configurations: instances.flatMap(({ profile, entries }) =>
       entries.map((entry) => ({
         name: profile === 'default' ? entry.name : `${entry.name}-${profile}`,

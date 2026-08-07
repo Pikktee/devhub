@@ -5,7 +5,7 @@ Ein kleiner lokaler Dienst, dem die Dev-Server aller Projekte gehören.
 Die Server hängen nicht mehr an einer Agent-Sitzung, einer IDE oder einer Shell,
 sondern an einem launchd-Dienst. Jedes Projekt hat einen festen Port und eine
 feste Adresse. Coding-Agenten — Claude Code, Cursor, Codex — starten nichts mehr
-selbst, sie hängen sich an oder rufen `dev up` auf.
+selbst, sie hängen sich an oder rufen `devhub up` auf.
 
 Warum es das gibt, steht in [PLAN.md](PLAN.md).
 
@@ -13,35 +13,36 @@ Warum es das gibt, steht in [PLAN.md](PLAN.md).
 
 ```bash
 cd ~/Dev/devhub
-npm link                 # macht "dev" global verfügbar (optional)
-dev service install      # launchd-Dienst, Übersicht auf http://localhost:4000
+npm link                 # macht "devhub" und "dev" global verfügbar (optional)
+devhub service install   # launchd-Dienst, Übersicht auf http://devhub.localhost:4000
 ```
 
 Ohne `npm link` funktioniert alles genauso über `node ~/Dev/devhub/bin/dev.js`.
+`dev` ist Kurzform für `devhub`.
 
 ## Kommandos
 
 | Kommando | Wirkung |
 | --- | --- |
-| `dev status [projekt]` | Was läuft, auf welcher Nummer, seit wann |
-| `dev up <projekt> [--profil p]` | Startet abgekoppelt; wirkungslos, wenn es schon läuft |
-| `dev down <projekt>` / `--alle` | Stoppt die ganze Prozessgruppe |
-| `dev restart <projekt>` | Stoppen und starten |
-| `dev logs <projekt> [-f] [-n 40]` | Ausgabe des Servers |
-| `dev ports` | Slot- und Portvergabe, grün = belegt |
-| `dev list` | Alle erkannten Projekte, auch die ohne Slot |
-| `dev adopt <projekt> [--slot N]` | Slot vergeben (`--profil smoke` für ein zweites Profil, `--titel Name` für den Anzeigenamen) |
-| `dev forget <projekt>` | Aus der Registry nehmen; der Slot bleibt gesperrt. Optional `--deps-loeschen` für node_modules/.next |
-| `dev favorite <projekt>` | Favorit umschalten (`--aus` entfernt); auch ohne Slot möglich |
-| `dev unfavorite <projekt>` | Favorit entfernen |
-| `dev sync [--projekt x] [--global]` | Agent-Dateien schreiben, `--probelauf` zeigt nur |
-| `dev agents [projekt]` | Regeln, Skills und Memory dieses Projekts |
-| `dev link [projekt]` | `AGENTS.md` und `CLAUDE.md` verknüpfen; ohne Argument nur Bericht |
-| `dev doctor` | Kollisionen und Ungereimtheiten |
-| `dev serve [--port 4000]` | Hub im Vordergrund |
-| `dev service install\|uninstall\|status` | launchd-Dienst |
-| `dev open [projekt]` | Im Browser öffnen; `--finder` / `--ordner` zeigt den Projektordner im Finder |
-| `dev reveal <projekt>` | Projektordner im Finder zeigen |
+| `devhub status [projekt]` | Was läuft, auf welcher Nummer, seit wann |
+| `devhub up <projekt> [--profil p]` | Startet abgekoppelt; wirkungslos, wenn es schon läuft |
+| `devhub down <projekt>` / `--alle` | Stoppt die ganze Prozessgruppe |
+| `devhub restart <projekt>` | Stoppen und starten |
+| `devhub logs <projekt> [-f] [-n 40]` | Ausgabe des Servers |
+| `devhub ports` | Slot- und Portvergabe, grün = belegt |
+| `devhub list` | Alle erkannten Projekte, auch die ohne Slot |
+| `devhub adopt <projekt> [--slot N]` | Slot vergeben (`--profil smoke` für ein zweites Profil, `--titel Name` für den Anzeigenamen) |
+| `devhub forget <projekt>` | Aus der Registry nehmen; der Slot bleibt gesperrt. Optional `--deps-loeschen` für node_modules/.next |
+| `devhub favorite <projekt>` | Favorit umschalten (`--aus` entfernt); auch ohne Slot möglich |
+| `devhub unfavorite <projekt>` | Favorit entfernen |
+| `devhub sync [--projekt x] [--global]` | Agent-Dateien schreiben, `--probelauf` zeigt nur |
+| `devhub agents [projekt]` | Regeln, Skills und Memory dieses Projekts |
+| `devhub link [projekt]` | `AGENTS.md` und `CLAUDE.md` verknüpfen; ohne Argument nur Bericht |
+| `devhub doctor` | Kollisionen und Ungereimtheiten |
+| `devhub serve [--port 4000]` | Hub im Vordergrund |
+| `devhub service install\|uninstall\|status` | launchd-Dienst |
+| `devhub open [projekt]` | Im Browser öffnen; `--finder` / `--ordner` zeigt den Projektordner im Finder |
+| `devhub reveal <projekt>` | Projektordner im Finder zeigen |
 
 Ohne Projektnamen nehmen die Kommandos das Verzeichnis, in dem man steht.
 
@@ -98,7 +99,7 @@ Steht bei einem Ordner „braucht `dev.json`“ oder „kein Server“, meint da
 Hub findet dort kein ableitbares Startkommando. Oft ist das kein Fehler —
 Notizordner, Unity, Swift, Sammelordner. Bei Sammelordnern (`konzepte`,
 `python-kurs`) den Unterordner einzeln aufnehmen:
-`dev adopt konzepte/augenarzt`.
+`devhub adopt konzepte/augenarzt`.
 
 **Python** braucht die Datei, mit absolutem Interpreterpfad statt Login-Shell:
 
@@ -123,35 +124,35 @@ Notizordner, Unity, Swift, Sammelordner. Bei Sammelordnern (`konzepte`,
 - **Vor dem Start** muss der Port frei sein, **nach dem Start** wird geprüft, ob
   der Prozess wirklich auf der zugewiesenen Nummer lauscht. Next.js kann das
   Ausweichen nicht abschalten; weicht es aus, stoppt der Hub es und sagt es.
-- **Idempotenz**: `dev up` auf etwas Laufendem ist ein No-op.
+- **Idempotenz**: `devhub up` auf etwas Laufendem ist ein No-op.
 
 ## Agenten
 
-`dev sync` schreibt zwei Schichten:
+`devhub sync` schreibt zwei Schichten:
 
 | Datei | Committen? | Inhalt |
 | --- | --- | --- |
-| `AGENTS.md` (zwischen Ankern) | ja | Portabler Hinweis: „wenn `dev` da ist, nutzen — sonst normal starten“ |
+| `AGENTS.md` (zwischen Ankern) | ja | Portabler Hinweis: „wenn `devhub` da ist, nutzen — sonst normal starten“ |
 | `.cursor/rules/devhub.local.mdc` | **nein** | Ports/URLs dieser Maschine (`alwaysApply`) |
 | `.claude/launch.json` | **nein** | Attach-Einträge für Claude Code |
 | `.gitignore` (Marker `# >>> devhub`) | ja | Nimmt die lokalen Dateien aus dem Repo |
 
 So landet nichts Maschinengebundenes im Git; auf einem Rechner ohne Hub
-bleibt der AGENTS.md-Text sinnvoll („ohne `dev`: wie üblich starten“).
+bleibt der AGENTS.md-Text sinnvoll („ohne `devhub`: wie üblich starten“).
 
 Der Anker `<!-- devhub:anfang -->` grenzt den geschriebenen Teil in `AGENTS.md`
 ab; alles davor und danach bleibt unangetastet. Eine vorhandene `launch.json`
 mit Kommandos wird vor dem Überschreiben nach `.claude/launch.json.vor-devhub`
 gesichert.
 
-`dev sync --global` schreibt die allgemeine Regel zusätzlich nach
+`devhub sync --global` schreibt die allgemeine Regel zusätzlich nach
 `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc` und `~/.codex/AGENTS.md`.
 `--hook` installiert obendrein einen Claude-PreToolUse-Hook, der `npm run dev`
 und Verwandte abfängt — der wirkt unabhängig davon, was das Modell gerade denkt.
 
 ### Agent-Kontext ansehen
 
-`dev agents <projekt>` und der Reiter im Hub zeigen, welche Regeln, Skills,
+`devhub agents <projekt>` und der Reiter im Hub zeigen, welche Regeln, Skills,
 Subagenten und Sitzungsspeicher für ein Projekt gelten — im Projekt und global.
 Nur lesen, nicht schreiben: der Hub soll nicht mit einem laufenden Agenten um
 dieselbe Datei streiten.
@@ -163,7 +164,7 @@ Dateizugriff über HTTP.
 ### `AGENTS.md` und `CLAUDE.md` verknüpfen
 
 Zwei Dateien mit demselben Inhalt laufen früher oder später auseinander, und
-dann gilt für Claude etwas anderes als für Cursor. `dev link` prüft, welcher von
+dann gilt für Claude etwas anderes als für Cursor. `devhub link` prüft, welcher von
 fünf Zuständen vorliegt, und handelt nur dort, wo nichts verloren gehen kann:
 
 | Zustand | Was passiert |
@@ -178,7 +179,7 @@ Gleiche Dateigröße genügt nicht: zwei Dateien können byteweise gleich groß 
 trotzdem verschieden sein. Verglichen wird der Inhalt.
 
 Der Verweis ist **relativ** (`CLAUDE.md -> AGENTS.md`), damit er einen Klon oder
-Umzug des Repos übersteht. `dev sync` schreibt durch einen solchen Verweis
+Umzug des Repos übersteht. `devhub sync` schreibt durch einen solchen Verweis
 hindurch, ohne ihn zu zerstören — dafür gibt es einen Test.
 
 ## Zwei Instanzen

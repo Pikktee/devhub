@@ -31,6 +31,8 @@ test('Adressen folgen dem Anzeigenamen, nicht dem Ordner', () => {
   assert.equal(ports.hostFor('Patina', 'default'), 'patina.localhost')
   assert.equal(ports.slugifyLabel('Sperrmüll-Termine FFM'), 'sperrmull-termine-ffm')
   assert.equal(ports.urlFor('Maptale', 'default', 5120), 'http://maptale.localhost:5120')
+  assert.equal(ports.urlForRole('frontend', 'Maptale', 'default', 5120), 'http://maptale.localhost:5120')
+  assert.equal(ports.urlForRole('backend', 'Maptale', 'default', 8720), 'http://127.0.0.1:8720')
 })
 
 test('Slots werden vergeben und nie wiederverwendet', () => {
@@ -85,7 +87,7 @@ test('Vertragsblock lässt sich wieder entfernen', () => {
 
 test('AGENTS.md-Hinweis ist portabel, Ports nur lokal', () => {
   const portable = portableContractText({ project: 'demo' })
-  assert.match(portable, /Ohne `dev`/)
+  assert.match(portable, /Ohne `devhub`/)
   assert.doesNotMatch(portable, /\.localhost:\d+/)
   assert.doesNotMatch(portable, /\| Profil \| Adresse \|/)
 
@@ -345,6 +347,8 @@ test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
   assert.equal(j.profiles.default[1].role, 'backend')
   assert.equal(j.profiles.default[1].port, 8720)
   assert.equal(j.profiles.default[1].cwd, 'server')
+  assert.equal(j.profiles.default[0].url, 'http://maptale.localhost:5120')
+  assert.equal(j.profiles.default[1].url, 'http://127.0.0.1:8720')
 
   const s = describeProject(registry, 'schnappster')
   assert.equal(s.profiles.default[0].role, 'frontend')
@@ -353,6 +357,7 @@ test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
   assert.deepEqual(s.profiles.default[1].cmd.slice(0, 3), ['uv', 'run', 'start'])
   assert.equal(s.profiles.default[1].port, 8717)
   assert.equal(s.profiles.default[0].port, 5117)
+  assert.equal(s.profiles.default[1].url, 'http://127.0.0.1:8717')
 })
 
 test('pnpm-Startkommando ohne doppeltes -- (Next würde --port sonst als Verzeichnis lesen)', () => {

@@ -42,4 +42,4 @@ PID-Dateien der echten Server durcheinander.
 - Kein Reverse-Proxy, keine `/etc/hosts`-Einträge, kein Root-Prozess.
 - Keine Vereinheitlichung fremder Agent-Formate. Der Hub zeigt an, was gilt, und
   schreibt nur zwischen die eigenen Anker.
-- Keine Änderung an fremden Projekten außer über `dev sync`.
+- Keine Änderung an fremden Projekten außer über `devhub sync`.
