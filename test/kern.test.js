@@ -279,6 +279,82 @@ test('Artefakte auflisten und löschen bleibt im Projekt', async () => {
   assert.equal(existsSync(join(dir, 'package.json')), true)
 })
 
+test('serve-Scripts werden nicht mit --port aufgerufen, sondern statisch ausgeliefert', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-serve-'))
+  const dir = join(root, 'overview')
+  mkdirSync(join(dir, 'public'), { recursive: true })
+  writeFileSync(join(dir, 'public', 'index.html'), '<h1>ok</h1>')
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ name: 'overview', scripts: { dev: 'npx serve public -l 3000' } })
+  )
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost' },
+    projects: { overview: { path: dir, slot: 15, profileSlots: {}, displayName: 'Projekte-Übersicht' } },
+    favorites: [],
+    displayNames: {},
+    retiredSlots: []
+  }
+  const view = describeProject(registry, 'overview')
+  assert.equal(view.profiles.default[0].runner, 'static')
+  assert.equal(view.profiles.default[0].dir, 'public')
+  assert.equal(view.profiles.default[0].port, 5115)
+})
+
+test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-duo-'))
+
+  const maptale = join(root, 'journey')
+  mkdirSync(join(maptale, 'server'), { recursive: true })
+  writeFileSync(
+    join(maptale, 'package.json'),
+    JSON.stringify({ name: 'maptale', scripts: { dev: 'vite' }, dependencies: { vite: '6.0.0' } })
+  )
+  writeFileSync(
+    join(maptale, 'server', 'package.json'),
+    JSON.stringify({ name: 'maptale-server', scripts: { dev: 'tsx watch src/index.ts' } })
+  )
+
+  const schnapp = join(root, 'schnappster')
+  mkdirSync(join(schnapp, 'web'), { recursive: true })
+  writeFileSync(join(schnapp, 'pyproject.toml'), '[project]\nname = "schnappster"\n')
+  writeFileSync(join(schnapp, 'uv.lock'), 'version = 1\n')
+  writeFileSync(
+    join(schnapp, 'web', 'package.json'),
+    JSON.stringify({ name: 'web', scripts: { dev: 'next dev' }, dependencies: { next: '15.0.0' } })
+  )
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost' },
+    projects: {
+      journey: { path: maptale, slot: 20, profileSlots: {}, displayName: 'Maptale' },
+      schnappster: { path: schnapp, slot: 17, profileSlots: {}, displayName: 'Schnappster' }
+    },
+    favorites: [],
+    displayNames: {},
+    retiredSlots: []
+  }
+
+  const j = describeProject(registry, 'journey')
+  assert.equal(j.profiles.default.length, 2)
+  assert.equal(j.profiles.default[0].name, 'web')
+  assert.equal(j.profiles.default[0].role, 'frontend')
+  assert.equal(j.profiles.default[0].env.MAPTALE_API, 'http://127.0.0.1:{backendPort}')
+  assert.equal(j.profiles.default[1].name, 'api')
+  assert.equal(j.profiles.default[1].role, 'backend')
+  assert.equal(j.profiles.default[1].port, 8720)
+  assert.equal(j.profiles.default[1].cwd, 'server')
+
+  const s = describeProject(registry, 'schnappster')
+  assert.equal(s.profiles.default[0].role, 'frontend')
+  assert.equal(s.profiles.default[0].env.NEXT_PUBLIC_API_URL, 'http://127.0.0.1:{backendPort}')
+  assert.equal(s.profiles.default[1].name, 'api')
+  assert.deepEqual(s.profiles.default[1].cmd.slice(0, 3), ['uv', 'run', 'start'])
+  assert.equal(s.profiles.default[1].port, 8717)
+  assert.equal(s.profiles.default[0].port, 5117)
+})
+
 test('pnpm-Startkommando ohne doppeltes -- (Next würde --port sonst als Verzeichnis lesen)', () => {
   const root = mkdtempSync(join(tmpdir(), 'devhub-pnpm-'))
   const dir = join(root, 'site')

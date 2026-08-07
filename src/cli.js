@@ -119,7 +119,8 @@ async function cmdStatus(positionals, flags) {
     for (const profile of status.profiles) {
       if (profile.state === 'läuft') running++
       const ports = profile.processes.map((p) => p.port ?? '—').join(' · ')
-      const address = profile.processes[0]?.url ?? '—'
+      const address =
+        profile.processes.find((p) => p.role === 'frontend')?.url ?? profile.processes[0]?.url ?? '—'
       const since = profile.startedAt ? duration(Date.now() - new Date(profile.startedAt)) : '—'
       rows.push([
         dot(profile.state),

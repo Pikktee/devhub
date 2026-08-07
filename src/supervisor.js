@@ -4,7 +4,7 @@ import { logDir, repoRoot } from './paths.js'
 import * as registryStore from './registry.js'
 import * as stateStore from './state.js'
 import { describeProject } from './discovery.js'
-import { hostFor, urlFor } from './ports.js'
+import { hostFor, portFor, urlFor } from './ports.js'
 import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, probePort } from './probe.js'
 import { logLine, openLog, startProcess, stopGroup } from './runners/process.js'
 import { composeDown, composeServices, composeUp, dockerAvailable } from './runners/compose.js'
@@ -29,17 +29,25 @@ function requireInstance(registry, name, profile) {
   return { project, slot, specs }
 }
 
-function varsFor({ project, profile, spec, port, registry }) {
+function varsFor({ project, profile, spec, port, registry, slot }) {
   const suffix = registry.settings.domainSuffix
   const label = project.hostLabel || project.displayName || project.name
+  const frontendPort = portFor(slot, 'frontend')
+  const backendPort = portFor(slot, 'backend')
   return {
-    port: port,
+    port,
+    frontendPort,
+    backendPort,
+    portFrontend: frontendPort,
+    portBackend: backendPort,
     projekt: project.name,
     project: project.name,
     profil: profile,
     profile,
     host: hostFor(label, profile, suffix),
     url: urlFor(label, profile, port, suffix),
+    frontendUrl: urlFor(label, profile, frontendPort, suffix),
+    backendUrl: `http://127.0.0.1:${backendPort}`,
     rolle: spec.role,
     role: spec.role,
     pfad: project.path,
@@ -66,6 +74,12 @@ export function tailLog(file, lines = 12) {
   }
 }
 
+/** Backend vor Frontend starten — Login braucht die API, sobald die UI offen ist. */
+function startOrder(specs) {
+  const rank = (role) => (role === 'backend' ? 0 : role === 'frontend' ? 1 : 2)
+  return [...specs].sort((a, b) => rank(a.role) - rank(b.role))
+}
+
 export async function up(name, { profile = 'default', registry = registryStore.load() } = {}) {
   const { project, slot, specs } = requireInstance(registry, name, profile)
   const recorded = stateStore.get(name, profile)
@@ -75,7 +89,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
 
   const ownedPid = (procName) => recorded?.processes?.find((p) => p.name === procName)
 
-  for (const spec of specs) {
+  for (const spec of startOrder(specs)) {
     const previous = ownedPid(spec.name)
     const busy = await probePort(spec.port)
 
@@ -94,7 +108,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     const cwd = resolve(project.path, spec.cwd ?? '.')
     if (!existsSync(cwd)) throw new Error(`Arbeitsverzeichnis ${cwd} existiert nicht`)
     const logFile = logFileFor(name, profile, spec.name)
-    const vars = varsFor({ project, profile, spec, port: spec.port, registry })
+    const vars = varsFor({ project, profile, spec, port: spec.port, registry, slot })
 
     if (spec.runner === 'compose') {
       if (!(await dockerAvailable())) throw new Error('Docker antwortet nicht — Docker Desktop starten')

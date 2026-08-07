@@ -127,23 +127,96 @@ function packageRunCmd(packageManager, script, args) {
   return [packageManager, 'run', script, '--', ...args]
 }
 
+/**
+ * `npx serve public -l 3000` — Vercel-serve kennt kein `--port`; an `npm run`
+ * angehängt crasht es. Stattdessen liefert der Hub den Ordner selbst aus.
+ */
+function servePublicDir(scriptBody) {
+  if (!scriptBody || typeof scriptBody !== 'string') return null
+  if (!/(?:^|[\s/])serve(?:@|\s|$)/.test(scriptBody)) return null
+  const tokens = scriptBody.trim().split(/\s+/).filter(Boolean)
+  const idx = tokens.findIndex((t) => t === 'serve' || t.startsWith('serve@'))
+  if (idx < 0) return null
+  const next = tokens[idx + 1]
+  if (next && !next.startsWith('-')) return next
+  return '.'
+}
+
+/** Node-API unter server/ (Maptale) oder uv-start neben web/ (Schnappster). */
+function inferApiSpec(dir) {
+  const serverPkg = readJson(join(dir, 'server', 'package.json'), null)
+  if (serverPkg?.scripts?.dev || serverPkg?.scripts?.start) {
+    const script = serverPkg.scripts.dev ? 'dev' : 'start'
+    const pm = packageManagerFor(join(dir, 'server'))
+    return normalizeSpec({
+      name: 'api',
+      role: 'backend',
+      cwd: 'server',
+      env: { PORT: '{port}' },
+      cmd: [pm, 'run', script]
+    })
+  }
+
+  // Python-API am Root, Frontend in web/ — `uv run start --prod` startet nur die API.
+  if (
+    existsSync(join(dir, 'pyproject.toml')) &&
+    existsSync(join(dir, 'web', 'package.json')) &&
+    (existsSync(join(dir, 'uv.lock')) || existsSync(join(dir, '.venv')))
+  ) {
+    return normalizeSpec({
+      name: 'api',
+      role: 'backend',
+      cwd: '.',
+      cmd: ['uv', 'run', 'start', '--prod', '--skip-tests', '--port', '{port}']
+    })
+  }
+
+  return null
+}
+
 function inferProfiles(dir, stack) {
   if (stack.kind === 'node' && stack.script) {
+    const node = findNodeDir(dir)
+    const scriptBody = node?.pkg?.scripts?.[stack.script]
+    const serveDir = servePublicDir(scriptBody)
+    if (serveDir) {
+      const rel =
+        stack.workdir && stack.workdir !== '.' ? join(stack.workdir, serveDir) : serveDir
+      return {
+        default: [
+          normalizeSpec({
+            name: 'web',
+            role: 'frontend',
+            runner: 'static',
+            dir: rel
+          })
+        ]
+      }
+    }
+
+    const api = inferApiSpec(dir)
     const strict = STRICT_PORT_FRAMEWORKS.has(stack.framework)
     const portArgs = ['--port', '{port}']
     if (strict) portArgs.push('--strictPort')
     const cmd = packageRunCmd(stack.packageManager, stack.script, portArgs)
-    return {
-      default: [
-        normalizeSpec({
-          name: 'web',
-          role: 'frontend',
-          cwd: stack.workdir,
-          env: { PORT: '{port}' },
-          cmd
-        })
-      ]
+
+    // Frontend kennt die API-Adresse oft fest (8787/8000) — auf den Slot umbiegen.
+    const frontendEnv = { PORT: '{port}' }
+    if (api) {
+      frontendEnv.MAPTALE_API = 'http://127.0.0.1:{backendPort}'
+      frontendEnv.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:{backendPort}'
     }
+
+    const web = normalizeSpec({
+      name: 'web',
+      role: 'frontend',
+      cwd: stack.workdir,
+      env: frontendEnv,
+      cmd
+    })
+
+    // Anzeige: Frontend zuerst (Übersicht/Adresse). Startreihenfolge steuert der Supervisor.
+    return { default: api ? [web, api] : [web] }
   }
   if (stack.kind === 'compose') {
     return {

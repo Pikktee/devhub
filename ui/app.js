@@ -419,7 +419,7 @@ function zeilenMenu(projekt, { profil, mitLog = false, mitNeu = false, mitAnsehe
 
 function zeileHtml(projekt, profil) {
   const laeuft = profil.state === 'läuft' || profil.state === 'teilweise'
-  const adresse = profil.processes[0]?.url
+  const adresse = profil.processes.find((p) => p.role === 'frontend')?.url ?? profil.processes[0]?.url
   const konflikt = profil.processes.some((p) => p.foreign)
   const speicherSumme = profil.processes.reduce((s, p) => s + (p.memory ?? 0), 0)
 
