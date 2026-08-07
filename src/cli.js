@@ -12,6 +12,7 @@ import { syncAll, syncGlobal, unsyncProject } from './sync.js'
 import { cleanProjectArtifacts } from './clean.js'
 import { installService, serviceStatus, uninstallService } from './service.js'
 import { startHub } from './server/index.js'
+import { runSetup } from './setup.js'
 import { color, dateTime, duration, table } from './util/fmt.js'
 import { portFor } from './ports.js'
 
@@ -45,7 +46,10 @@ const ALIASES = {
   aus: 'off',
   f: 'follow',
   n: 'lines',
-  p: 'profile'
+  p: 'profile',
+  wurzel: 'wurzel',
+  root: 'wurzel',
+  w: 'wurzel'
 }
 
 const BOOLEAN_FLAGS = new Set(['all', 'follow', 'dryRun', 'global', 'noGlobal', 'hook', 'json', 'help', 'finder', 'on', 'off', 'keepFiles', 'cleanDeps'])
@@ -550,6 +554,19 @@ async function cmdDoctor() {
   console.log(table(findings.map(([kind, text]) => [marker[kind], text])))
 }
 
+// ---------------------------------------------------------------- setup
+
+async function cmdSetup(_positionals, flags) {
+  const { steps, roots, hubPort } = await runSetup({ wurzel: flags.wurzel })
+  for (const { step, ok, detail } of steps) {
+    console.log(`${ok ? color.green('✓') : color.red('✗')} ${step.padEnd(14)} ${detail}`)
+  }
+  console.log('')
+  console.log(`Projektwurzel: ${roots.join(', ')}`)
+  console.log(`Übersicht:     http://devhub.localhost:${hubPort}`)
+  console.log(color.dim('Als Nächstes: devhub list · devhub adopt <ordner> · devhub sync · devhub up <ordner>'))
+}
+
 // ---------------------------------------------------------------- service/serve
 
 async function cmdServe(_positionals, flags) {
@@ -630,6 +647,7 @@ const HELP = `devhub — die Dev-Server gehören dem Hub, nicht der Sitzung
   devhub agents [projekt]              Regeln, Skills und Memory des Projekts
   devhub link [projekt] [--alle]       AGENTS.md und CLAUDE.md verknüpfen (ohne Argument: Bericht)
   devhub doctor                        Kollisionen und Ungereimtheiten
+  devhub setup [--wurzel Pfad]         neuen Rechner einrichten (npm link, launchd, Regeln, Skill)
   devhub serve [--port 4000]           Hub im Vordergrund
   devhub service install|uninstall     launchd-Dienst
   devhub open [projekt]                im Browser öffnen (--finder / --ordner: Ordner im Finder)
@@ -657,6 +675,7 @@ const COMMANDS = {
   agents: cmdAgents,
   link: cmdLink,
   doctor: cmdDoctor,
+  setup: cmdSetup,
   serve: cmdServe,
   service: cmdService,
   open: cmdOpen,

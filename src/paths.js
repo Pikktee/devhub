@@ -31,6 +31,6 @@ export const claudeHome = join(home, '.claude')
 export const cursorHome = join(home, '.cursor')
 export const codexHome = join(home, '.codex')
 export const launchAgentsDir = join(home, 'Library', 'LaunchAgents')
-export const launchdLabel = instance === 'default' ? 'net.henrikheil.devhub' : `net.henrikheil.devhub.${instance}`
+export const launchdLabel = instance === 'default' ? 'dev.local.devhub' : `dev.local.devhub.${instance}`
 
 export { home }

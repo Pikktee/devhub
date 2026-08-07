@@ -1,9 +1,9 @@
 {
   "name": "devhub",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
-  "description": "Lokaler Dienst, dem die Dev-Server aller Projekte gehören.",
+  "description": "Lokaler Dienst, dem die Dev-Server aller Projekte gehören — fest Ports, launchd, Coding-Agenten.",
   "bin": {
     "dev": "./bin/dev.js",
     "devhub": "./bin/dev.js"
@@ -16,5 +16,21 @@
     "serve": "node bin/dev.js serve",
     "serve:dev": "DEVHUB_INSTANCE=dev node bin/dev.js serve --port 4001"
   },
-  "license": "UNLICENSED"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pikktee/devhub.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Pikktee/devhub/issues"
+  },
+  "homepage": "https://github.com/Pikktee/devhub#readme",
+  "keywords": [
+    "dev-server",
+    "localhost",
+    "launchd",
+    "cursor",
+    "claude-code",
+    "agents"
+  ],
+  "license": "MIT"
 }

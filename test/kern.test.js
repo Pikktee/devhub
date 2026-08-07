@@ -242,21 +242,21 @@ test('GitHub-Remotes werden aus der Config gelesen', () => {
   const config = `[core]
 	repositoryformatversion = 0
 [remote "origin"]
-	url = git@github.com:henrik/devhub.git
+	url = git@github.com:example/devhub.git
 	fetch = +refs/heads/*:refs/remotes/origin/*
 `
-  assert.equal(remoteUrlFromConfig(config), 'git@github.com:henrik/devhub.git')
+  assert.equal(remoteUrlFromConfig(config), 'git@github.com:example/devhub.git')
 
   const dir = mkdtempSync(join(tmpdir(), 'devhub-git-'))
   mkdirSync(join(dir, '.git'))
   writeFileSync(join(dir, '.git', 'config'), config)
   assert.deepEqual(githubInfoFor(dir), {
-    url: 'https://github.com/henrik/devhub',
+    url: 'https://github.com/example/devhub',
     root: dir,
-    label: 'henrik/devhub'
+    label: 'example/devhub'
   })
   mkdirSync(join(dir, 'src'))
-  assert.equal(githubInfoFor(join(dir, 'src')).url, 'https://github.com/henrik/devhub')
+  assert.equal(githubInfoFor(join(dir, 'src')).url, 'https://github.com/example/devhub')
 })
 
 test('Artefakte auflisten und löschen bleibt im Projekt', async () => {
