@@ -15,14 +15,15 @@ export function portableContractText({ project }) {
   return `## Dev-Server und devhub
 
 Falls auf diesem Rechner das CLI \`dev\` (devhub) verfügbar ist, gehören die
-Dev-Server diesem Dienst — **nicht** mit \`npm run dev\`, \`pnpm dev\`, \`vite\`,
-\`next dev\`, \`uvicorn\`, \`python -m http.server\` oder \`docker compose up\`
-starten. Sonst läuft leicht ein zweiter Server auf einer anderen Nummer.
+Dev-Server diesem Dienst. **Nicht** mit \`npm run dev\`, \`pnpm dev\`, \`vite\`,
+\`next dev\`, \`uvicorn\`, \`python -m http.server\`, \`docker compose up\` oder
+\`npx serve\` starten — sonst läuft leicht ein zweiter Server auf einer anderen
+Nummer.
 
-- Zustand / Adressen: \`dev status ${project}\`
-- Starten: \`dev up ${project}\`
-- Stoppen: \`dev down ${project}\`
-- Log: \`dev logs ${project}\`
+Vor dem Öffnen der App: \`dev status ${project}\`. Starten nur mit
+\`dev up ${project}\` (Ordnername), stoppen mit \`dev down ${project}\`, Log mit
+\`dev logs ${project}\`. Ein Aufruf startet alle Rollen (Frontend und API, falls
+vorhanden).
 
 Ohne \`dev\` / ohne Hub: Server wie im Projekt üblich starten.`
 }
@@ -44,10 +45,11 @@ Diese Datei ist lokal und sollte nicht committed werden. Ports gelten nur hier.
 | --- | --- |
 ${rows || '| — | — |'}
 
-- \`dev status ${project}\` · \`dev up ${project}\` · \`dev down ${project}\`
+- \`dev status ${project}\` · \`dev up ${project}\` · \`dev down ${project}\` · \`dev logs ${project}\`
 - Übersicht: http://localhost:${hubPort}
+- CLI-Schlüssel ist der **Ordner** \`${project}\`; die URL folgt dem Anzeigenamen.
 
-**Nicht** selbst \`npm run dev\` / \`vite\` / \`next dev\` o. Ä. starten.`
+**Nicht** selbst \`npm run dev\` / \`vite\` / \`next dev\` / \`uvicorn\` / \`npx serve\` o. Ä. starten.`
 }
 
 /** @deprecated Alias — früher enthielt der AGENTS.md-Block Ports. */

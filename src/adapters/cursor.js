@@ -16,8 +16,12 @@ ${block}
 `
 }
 
-export function writeCursorRule(baseDir, block, { dryRun = false, description = 'Lokale Dev-Server (devhub)' } = {}) {
-  const file = join(baseDir, 'rules', 'devhub.local.mdc')
+export function writeCursorRule(
+  baseDir,
+  block,
+  { dryRun = false, description = 'Lokale Dev-Server (devhub)', fileName = 'devhub.local.mdc' } = {}
+) {
+  const file = join(baseDir, 'rules', fileName)
   const next = ruleText(block, { description })
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : ''
   if (existing === next) {
@@ -37,7 +41,10 @@ export function writeCursorRule(baseDir, block, { dryRun = false, description = 
     changed: true,
     created: !existing,
     action: !existing ? 'Datei angelegt' : 'Datei überschrieben',
-    detail: 'Lokale alwaysApply-Regel mit Ports (gitignoriert)'
+    detail:
+      fileName === 'devhub.mdc'
+        ? 'Globale alwaysApply-Regel'
+        : 'Lokale alwaysApply-Regel mit Ports (gitignoriert)'
   }
 }
 
