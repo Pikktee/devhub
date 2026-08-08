@@ -109,6 +109,30 @@ test('AGENTS.md-Hinweis ist portabel, Ports nur lokal', () => {
   assert.equal(ensureGitignore(dir).changed, false)
 })
 
+test('sync schreibt keine AGENTS.md mehr, nur lokale Dateien', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-sync-local-'))
+  const dir = join(root, 'demo')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ name: 'demo', scripts: { dev: 'vite' }, dependencies: { vite: '6.0.0' } })
+  )
+  writeFileSync(join(dir, 'AGENTS.md'), '# Eigenes\n\nUnberührt.\n')
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost', hubPort: 4000 },
+    projects: { demo: { path: dir, slot: 30, profileSlots: {} } },
+    displayNames: {},
+    retiredSlots: []
+  }
+  const { syncProject } = await import('../src/sync.js')
+  const result = syncProject(registry, 'demo')
+  assert.ok(!result.changes.some((c) => c.file.endsWith('AGENTS.md')))
+  assert.ok(result.changes.some((c) => c.file.includes('devhub.local.mdc') && c.changed))
+  assert.ok(result.changes.some((c) => c.file.includes('launch.json') && c.changed))
+  assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), '# Eigenes\n\nUnberührt.\n')
+})
+
 test('launch.json enthält ausschließlich Attach-Einträge', () => {
   const json = launchJsonFor([
     { profile: 'default', entries: [{ name: 'web', port: 5190, url: 'http://journey.localhost:5190' }] },
@@ -123,19 +147,14 @@ test('launch.json enthält ausschließlich Attach-Einträge', () => {
   }
 })
 
-test('Favoriten und Anzeigenamen überleben ohne Slot', () => {
-  const registry = { settings: {}, projects: {}, favorites: [], displayNames: {}, retiredSlots: [] }
-  assert.equal(registryStore.toggleFavorite(registry, 'journey'), true)
-  assert.deepEqual(registry.favorites, ['journey'])
+test('Anzeigenamen überleben ohne Slot und wandern bei adopt', () => {
+  const registry = { settings: {}, projects: {}, displayNames: {}, retiredSlots: [] }
   assert.equal(registryStore.setDisplayName(registry, 'journey', 'Maptale'), 'Maptale')
   assert.equal(registry.displayNames.journey, 'Maptale')
 
   registryStore.addProject(registry, { name: 'journey', path: '/tmp/journey', slot: 90 })
   assert.equal(registry.projects.journey.displayName, 'Maptale')
   assert.equal(registry.displayNames.journey, undefined)
-  assert.equal(registryStore.isFavorite(registry, 'journey'), true)
-  assert.equal(registryStore.toggleFavorite(registry, 'journey'), false)
-  assert.equal(registry.projects.journey.favorite, undefined)
 })
 
 test('Anzeigename wird aus Projektquellen abgeleitet, nicht erfunden', () => {
@@ -189,7 +208,6 @@ test('Anzeigename wird aus Projektquellen abgeleitet, nicht erfunden', () => {
     {
       settings: { roots: [root], domainSuffix: 'localhost' },
       projects: { journey: { path: withTitle, slot: 20, displayName: 'Maptale', profileSlots: {} } },
-      favorites: [],
       displayNames: {},
       retiredSlots: []
     },
@@ -204,7 +222,6 @@ test('Anzeigename wird aus Projektquellen abgeleitet, nicht erfunden', () => {
     projects: {
       'pitfall-remake': { path: claudeMeta, slot: 20, displayName: 'CLAUDE.md' }
     },
-    favorites: [],
     displayNames: {},
     retiredSlots: []
   }
@@ -294,7 +311,6 @@ test('serve-Scripts werden nicht mit --port aufgerufen, sondern statisch ausgeli
   const registry = {
     settings: { roots: [root], domainSuffix: 'localhost' },
     projects: { overview: { path: dir, slot: 15, profileSlots: {}, displayName: 'Projekte-Übersicht' } },
-    favorites: [],
     displayNames: {},
     retiredSlots: []
   }
@@ -333,7 +349,6 @@ test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
       journey: { path: maptale, slot: 20, profileSlots: {}, displayName: 'Maptale' },
       schnappster: { path: schnapp, slot: 17, profileSlots: {}, displayName: 'Schnappster' }
     },
-    favorites: [],
     displayNames: {},
     retiredSlots: []
   }
@@ -377,7 +392,6 @@ test('pnpm-Startkommando ohne doppeltes -- (Next würde --port sonst als Verzeic
   const registry = {
     settings: { roots: [root] },
     projects: { site: { path: dir, slot: 14, profileSlots: {} } },
-    favorites: [],
     displayNames: {},
     retiredSlots: []
   }
@@ -403,6 +417,50 @@ test('pnpm-Startkommando ohne doppeltes -- (Next würde --port sonst als Verzeic
     '{port}',
     '--strictPort'
   ])
+})
+
+test('Python/Flask mit app.py wird abgeleitet', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-py-'))
+  const dir = join(root, 'sperrmuell')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'requirements.txt'), 'flask\n')
+  writeFileSync(join(dir, 'app.py'), 'print("hi")\n')
+  mkdirSync(join(dir, '.venv', 'bin'), { recursive: true })
+  writeFileSync(join(dir, '.venv', 'bin', 'python'), '')
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost' },
+    projects: { sperrmuell: { path: dir, slot: 21, profileSlots: {} } },
+    displayNames: {},
+    retiredSlots: []
+  }
+  const view = describeProject(registry, 'sperrmuell')
+  assert.equal(view.source, 'abgeleitet')
+  assert.equal(view.problems.length, 0)
+  assert.equal(view.profiles.default.length, 1)
+  assert.equal(view.profiles.default[0].role, 'frontend')
+  assert.equal(view.profiles.default[0].env.PORT, '{port}')
+  assert.deepEqual(view.profiles.default[0].cmd, ['.venv/bin/python', 'app.py'])
+  assert.equal(view.profiles.default[0].port, 5121)
+})
+
+test('Python ohne venv warnt vor fehlenden Abhängigkeiten', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-py-novenv-'))
+  const dir = join(root, 'demo')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'requirements.txt'), 'flask\n')
+  writeFileSync(join(dir, 'app.py'), 'print("hi")\n')
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost' },
+    projects: { demo: { path: dir, slot: 22, profileSlots: {} } },
+    displayNames: {},
+    retiredSlots: []
+  }
+  const view = describeProject(registry, 'demo')
+  assert.equal(view.source, 'abgeleitet')
+  assert.deepEqual(view.profiles.default[0].cmd, ['python3', 'app.py'])
+  assert.match(view.problems.join(' '), /Kein venv/)
 })
 
 test('--deps-loeschen wird als cleanDeps erkannt', () => {

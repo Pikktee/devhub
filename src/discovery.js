@@ -228,7 +228,40 @@ function inferProfiles(dir, stack) {
   if (stack.kind === 'static') {
     return { default: [normalizeSpec({ name: 'web', runner: 'static', role: 'frontend', dir: '.' })] }
   }
+  if (stack.kind === 'python') {
+    return inferPythonProfiles(dir)
+  }
   return null
+}
+
+/** Flask/FastAPI-übliche Einstiege: app.py liest oft PORT aus der Umgebung. */
+const PYTHON_ENTRYPOINTS = ['app.py', 'main.py', 'server.py', 'wsgi.py']
+
+function pythonInterpreter(dir) {
+  for (const rel of ['.venv/bin/python', 'venv/bin/python']) {
+    if (existsSync(join(dir, rel))) return rel
+  }
+  return 'python3'
+}
+
+function hasPythonVenv(dir) {
+  return existsSync(join(dir, '.venv', 'bin', 'python')) || existsSync(join(dir, 'venv', 'bin', 'python'))
+}
+
+function inferPythonProfiles(dir) {
+  const entry = PYTHON_ENTRYPOINTS.find((name) => existsSync(join(dir, name)))
+  if (!entry) return null
+  return {
+    default: [
+      normalizeSpec({
+        name: 'web',
+        role: 'frontend',
+        cwd: '.',
+        env: { PORT: '{port}' },
+        cmd: [pythonInterpreter(dir), entry]
+      })
+    ]
+  }
 }
 
 /**
@@ -237,7 +270,7 @@ function inferProfiles(dir, stack) {
  */
 function diagnose(dir, stack) {
   if (stack.kind === 'python') {
-    return 'Python-Projekt ohne dev.json — Startkommando ist nicht ableitbar'
+    return 'Python-Projekt ohne erkennbaren Einstieg (app.py/main.py) — Startkommando in dev.json festlegen'
   }
 
   let unterprojekte = []
@@ -461,14 +494,12 @@ export function describeProject(registry, name) {
   const suggested = existsSync(base.path) ? suggestDisplayName(base.path) : null
   const displayName = storedName || suggested || name
   const hostLabel = hostLabelFor(registry, name, displayName)
-  const favorite = (registry.favorites ?? []).includes(name) || Boolean(registry.projects[name]?.favorite)
 
   if (!existsSync(base.path)) {
     return {
       ...base,
       displayName,
       hostLabel,
-      favorite,
       suggestedDisplayName: suggested,
       stack: { kind: 'missing' },
       profiles: {},
@@ -504,6 +535,18 @@ export function describeProject(registry, name) {
     }
   }
 
+  // Ohne venv landet man oft bei ModuleNotFoundError — lieber vorher sagen.
+  if (
+    stack.kind === 'python' &&
+    source === 'abgeleitet' &&
+    existsSync(join(base.path, 'requirements.txt')) &&
+    !hasPythonVenv(base.path)
+  ) {
+    problems.push(
+      'Kein venv — einmal: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'
+    )
+  }
+
   const suffix = registry.settings.domainSuffix
   const resolved = {}
   for (const [profile, specs] of Object.entries(profiles)) {
@@ -529,7 +572,6 @@ export function describeProject(registry, name) {
     ...base,
     displayName,
     hostLabel,
-    favorite,
     suggestedDisplayName: suggested,
     stack,
     profiles: resolved,

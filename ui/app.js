@@ -7,7 +7,6 @@ const zustand = {
   daten: null,
   ansicht: 'uebersicht',
   projekt: null,
-  filter: 'alle',
   suche: '',
   log: { profil: 'default', prozess: null, folgen: true },
   agenten: null,
@@ -94,25 +93,184 @@ function syncAenderungen(ergebnis) {
   return zeilen
 }
 
-function zeigeProtokoll(text, titel = 'Protokoll') {
+function zeigeProtokollDialog({ titel, vorspann = [], geaendert = [], rohtext = '', hinweis = '', hinweisHtml = false }) {
   $('#protokoll-titel').textContent = titel
-  $('#protokoll-text').textContent = text
+  const teile = []
+
+  if (vorspann.length) {
+    teile.push(`<ul class="protokoll-punkte">${vorspann.map((t) => `<li>${h(t)}</li>`).join('')}</ul>`)
+  }
+
+  if (geaendert.length) {
+    teile.push(`
+      <div class="protokoll-abschnitt">
+        <h3>Geänderte Dateien <span class="hint">${geaendert.length}</span></h3>
+        <ul class="protokoll-dateien">
+          ${geaendert
+            .map(
+              (z) => `<li>
+                <span class="protokoll-status" data-status="${h(z.status)}">${h(z.status)}</span>
+                <code title="${h(z.absolut)}">${h(z.pfad)}</code>
+                ${z.detail ? `<span class="hint">${h(z.detail)}</span>` : ''}
+                ${pfadAktionenHtml(z.absolut, { kompakt: true })}
+              </li>`
+            )
+            .join('')}
+        </ul>
+      </div>`)
+  } else if (!vorspann.length) {
+    teile.push('<p class="protokoll-leer">Keine Dateiänderungen.</p>')
+  }
+
+  if (rohtext) {
+    teile.push(`
+      <details class="protokoll-details">
+        <summary>Vollständiges Protokoll</summary>
+        <pre class="protokoll-text">${h(rohtext)}</pre>
+      </details>`)
+  }
+
+  if (hinweis) {
+    teile.push(`<div class="protokoll-hinweis">${hinweisHtml ? hinweis : h(hinweis)}</div>`)
+  }
+
+  $('#protokoll-koerper').innerHTML = teile.join('')
   const dlg = $('#protokoll')
   if (typeof dlg.showModal === 'function') dlg.showModal()
   else dlg.setAttribute('open', '')
 }
 
-function speicherBytes(bytes) {
-  if (!bytes || bytes < 1024) return `${bytes || 0} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
+/** @deprecated Alias — früher nur Klartext. */
+function zeigeProtokoll(text, titel = 'Protokoll') {
+  zeigeProtokollDialog({ titel, rohtext: text })
+}
+
+function formatSyncProtokoll(ergebnis, { titel, vorspann = [] } = {}) {
+  const zeilen = syncAenderungen(ergebnis)
+  const geaendert = zeilen.filter((z) => z.changed)
+  const lines = [...vorspann]
+  for (const r of ergebnis.results ?? []) {
+    if (r.slot != null) lines.push(`Slot ${r.slot}`)
+    for (const inst of r.instances ?? []) {
+      for (const e of inst.entries ?? []) {
+        lines.push(`  ${inst.profile}/${e.name}: ${e.url ?? '—'}`)
+      }
+    }
   }
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1).replace('.', ',')} GB`
+  if (lines.length) lines.push('')
+  for (const z of zeilen) {
+    lines.push(`${z.status.padEnd(12)} ${z.pfad}`)
+    lines.push(`             ${z.absolut}`)
+    if (z.action) lines.push(`             ${z.action}${z.detail ? ` — ${z.detail}` : ''}`)
+    if (z.backup) lines.push(`             Sicherung: ${z.backup}`)
+  }
+  if (ergebnis.results?.[0]?.log?.length) {
+    lines.push('', '— Hub-Log —', ...ergebnis.results[0].log)
+  }
+  const kopf =
+    titel ??
+    (geaendert.length
+      ? `${geaendert.length} Datei${geaendert.length === 1 ? '' : 'en'} geändert`
+      : 'Bereits aktuell — nichts geändert')
+
+  const zusammenfassung = [...vorspann]
+  for (const r of ergebnis.results ?? []) {
+    if (r.slot != null) zusammenfassung.push(`Slot ${r.slot}`)
+    for (const inst of r.instances ?? []) {
+      for (const e of inst.entries ?? []) {
+        if (e.url) zusammenfassung.push(`${inst.profile}/${e.name}: ${e.url}`)
+      }
+    }
+  }
+
+  return {
+    kopf,
+    text: lines.join('\n') || 'Keine Einträge.',
+    vorspann: zusammenfassung,
+    geaendert
+  }
+}
+
+function zeigeSyncBericht(ergebnis, optionen = {}) {
+  const { kopf, text, vorspann, geaendert } = formatSyncProtokoll(ergebnis, optionen)
+  zeigeOk(
+    geaendert.length
+      ? `${geaendert.length} Datei${geaendert.length === 1 ? '' : 'en'} geändert`
+      : vorspann.length
+        ? kopf
+        : 'Bereits aktuell'
+  )
+  // Ohne Substanz reicht die Toast-Meldung — kein Modal-Lärm.
+  if (!geaendert.length && !vorspann.length) return
+  zeigeProtokollDialog({
+    titel: kopf,
+    vorspann,
+    geaendert,
+    rohtext: text,
+    hinweis: 'Dauerhaft im Hub-Log (Kopfzeile → Verlauf).'
+  })
+}
+
+async function zeigeHubLog() {
+  try {
+    const daten = await api('/api/hub-log?lines=150')
+    const text = daten.lines?.length ? daten.lines.join('\n') : 'Noch keine Einträge.'
+    zeigeProtokollDialog({
+      titel: 'Hub-Verlauf',
+      rohtext: text,
+      hinweisHtml: true,
+      hinweis: daten.file
+        ? `<span class="protokoll-datei-zeile"><span>Datei: <code title="${h(daten.file)}">${h(daten.file)}</code></span>${pfadAktionenHtml(daten.file, { kompakt: true })}</span>`
+        : ''
+    })
+  } catch (err) {
+    zeigeFehler(err.message)
+  }
+}
+
+function editorAnzeigename() {
+  const ed = (zustand.daten?.hub?.editor ?? 'cursor').toLowerCase()
+  if (ed === 'cursor' || ed.endsWith('/cursor')) return 'Cursor'
+  if (ed === 'code' || ed === 'code-insiders' || ed.endsWith('/code')) return 'VS Code'
+  if (ed === 'zed' || ed.endsWith('/zed')) return 'Zed'
+  if (ed === 'subl' || ed.includes('sublime')) return 'Sublime'
+  return 'Editor'
+}
+
+/**
+ * Kompakte Extern-Aktionen für angezeigte Pfade.
+ * `kompakt`: nur Icons (Listen); sonst beschriftete Knöpfe (Dialog/Kopf).
+ */
+function pfadAktionenHtml(pfad, { kompakt = false, schliessen = false } = {}) {
+  if (!pfad) return ''
+  const editor = editorAnzeigename()
+  if (kompakt) {
+    return `<span class="pfad-aktionen">
+      <button type="button" class="knopf symbol leise" data-aktion="pfad-oeffnen" data-pfad="${h(pfad)}" data-ziel="editor" title="In ${h(editor)} öffnen" aria-label="In ${h(editor)} öffnen">${iconExtern}</button>
+      <button type="button" class="knopf symbol leise" data-aktion="pfad-oeffnen" data-pfad="${h(pfad)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">${iconFinder}</button>
+    </span>`
+  }
+  return `<div class="pfad-aktionen fest">
+    <button type="button" class="knopf leise" data-aktion="pfad-oeffnen" data-pfad="${h(pfad)}" data-ziel="editor" title="In ${h(editor)} öffnen">In ${h(editor)}</button>
+    <button type="button" class="knopf leise" data-aktion="pfad-oeffnen" data-pfad="${h(pfad)}" data-ziel="finder" title="Im Finder zeigen">Finder</button>
+    ${
+      schliessen
+        ? `<button type="button" class="knopf leise" data-aktion="datei-schliessen" aria-label="Schließen">Schließen</button>`
+        : ''
+    }
+  </div>`
+}
+
+async function oeffnePfad(pfad, { finder = false } = {}) {
+  if (!pfad) return
+  await api('/api/open', {
+    method: 'POST',
+    body: JSON.stringify({ path: pfad, finder: Boolean(finder) })
+  })
 }
 
 /** Schicker Ersatz für window.confirm — inkl. Opt-in für Abhängigkeiten. */
-function frageSlotEntfernen(projektName) {
+async function frageSlotEntfernen(projektName) {
   const dlg = $('#bestaetigung')
   const clean = $('#bestaetigung-clean')
   const hint = $('#bestaetigung-clean-hint')
@@ -121,34 +279,30 @@ function frageSlotEntfernen(projektName) {
   $('#bestaetigung-titel').textContent = `Slot von „${projektName}“ entfernen?`
   $('#bestaetigung-text').textContent = 'Der Slot bleibt gesperrt und wird nicht neu vergeben.'
   $('#bestaetigung-liste').innerHTML = [
-    'Hub-Blöcke in AGENTS.md sowie lokale Dateien (Cursor-Regel, launch.json) werden entfernt',
+    'Lokale Dateien (Cursor-Regel, launch.json) werden entfernt; ein alter AGENTS.md-Block ebenfalls',
     'Der Dev-Server wird weder gestartet noch gestoppt'
   ]
     .map((t) => `<li>${h(t)}</li>`)
     .join('')
 
   clean.checked = false
-  hint.textContent = 'node_modules, .next und ähnliche Caches — Größe wird ermittelt …'
   option.hidden = false
-
-  let veraltet = false
-  api(`/api/projects/${encodeURIComponent(projektName)}/artifacts`)
-    .then((daten) => {
-      if (veraltet) return
-      if (!daten.items?.length) {
-        hint.textContent = 'Keine node_modules/.next o. Ä. gefunden — Option ändert nichts'
-        return
-      }
+  // Größe vor dem Öffnen laden — sonst springt der Dialog, wenn der Hint nachzieht.
+  hint.textContent = 'node_modules, .next und ähnliche Caches'
+  try {
+    const daten = await api(`/api/projects/${encodeURIComponent(projektName)}/artifacts`)
+    if (!daten.items?.length) {
+      hint.textContent = 'Keine node_modules/.next o. Ä. gefunden — Option ändert nichts'
+    } else {
       const namen = [...new Set(daten.items.map((i) => i.name))].join(', ')
       hint.textContent = `${speicherBytes(daten.bytes)} in ${daten.items.length} Ordner${daten.items.length === 1 ? '' : 'n'} (${namen})`
-    })
-    .catch(() => {
-      if (!veraltet) hint.textContent = 'node_modules, .next und ähnliche Caches'
-    })
+    }
+  } catch {
+    hint.textContent = 'node_modules, .next und ähnliche Caches'
+  }
 
   return new Promise((resolve) => {
     const fertig = () => {
-      veraltet = true
       dlg.removeEventListener('close', fertig)
       if (dlg.returnValue === 'ok') resolve({ ok: true, cleanDeps: clean.checked })
       else resolve({ ok: false, cleanDeps: false })
@@ -156,7 +310,7 @@ function frageSlotEntfernen(projektName) {
     dlg.addEventListener('close', fertig)
     if (typeof dlg.showModal === 'function') dlg.showModal()
     else dlg.setAttribute('open', '')
-    $('#bestaetigung-ok')?.focus()
+    $('#bestaetigung-ok')?.focus({ preventScroll: true })
   })
 }
 
@@ -214,48 +368,11 @@ function frageEingabe({
   })
 }
 
-function formatSyncProtokoll(ergebnis, { titel, vorspann = [] } = {}) {
-  const zeilen = syncAenderungen(ergebnis)
-  const geaendert = zeilen.filter((z) => z.changed)
-  const lines = [...vorspann]
-  for (const r of ergebnis.results ?? []) {
-    if (r.slot != null) lines.push(`Slot ${r.slot}`)
-    for (const inst of r.instances ?? []) {
-      for (const e of inst.entries ?? []) {
-        lines.push(`  ${inst.profile}/${e.name}: ${e.url ?? '—'}`)
-      }
-    }
-  }
-  if (lines.length) lines.push('')
-  for (const z of zeilen) {
-    lines.push(`${z.status.padEnd(12)} ${z.pfad}`)
-    lines.push(`             ${z.absolut}`)
-    if (z.action) lines.push(`             ${z.action}${z.detail ? ` — ${z.detail}` : ''}`)
-    if (z.backup) lines.push(`             Sicherung: ${z.backup}`)
-  }
-  if (ergebnis.results?.[0]?.log?.length) {
-    lines.push('', '— Hub-Log —', ...ergebnis.results[0].log)
-  }
-  const kopf =
-    titel ??
-    (geaendert.length
-      ? `${geaendert.length} Datei${geaendert.length === 1 ? '' : 'en'} geändert`
-      : 'Bereits aktuell — nichts geändert')
-  return { kopf, text: lines.join('\n') || 'Keine Einträge.' }
-}
-
-function zeigeSyncBericht(ergebnis, optionen = {}) {
-  const { kopf, text } = formatSyncProtokoll(ergebnis, optionen)
-  zeigeProtokoll(text, kopf)
-  const geaendert = syncAenderungen(ergebnis).filter((z) => z.changed).length
-  zeigeOk(geaendert ? `${geaendert} Datei${geaendert === 1 ? '' : 'en'} · Details im Protokoll` : 'Bereits aktuell')
-}
-
 async function handle(knopf, arbeit) {
-  const vorher = knopf?.textContent
   if (knopf) {
     knopf.disabled = true
-    knopf.textContent = '…'
+    knopf.setAttribute('aria-busy', 'true')
+    knopf.classList.add('busy')
   }
   try {
     const ergebnis = await arbeit()
@@ -266,28 +383,41 @@ async function handle(knopf, arbeit) {
   } finally {
     if (knopf) {
       knopf.disabled = false
-      knopf.textContent = vorher
+      knopf.removeAttribute('aria-busy')
+      knopf.classList.remove('busy')
     }
   }
 }
 
 // ------------------------------------------------------------------ Format
 
+/** Laufzeit wie in der CLI — reine Maßzahl, damit sie neben MB sinnvoll wirkt. */
 const dauer = (iso) => {
   if (!iso) return '—'
   const ms = Date.now() - new Date(iso)
-  const min = Math.floor(ms / 60000)
-  if (min < 1) return 'gerade eben'
-  if (min < 60) return `seit ${min} min`
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s} s`
+  const min = Math.floor(s / 60)
+  if (min < 60) return `${min} min`
   const std = Math.floor(min / 60)
-  if (std < 24) return min % 60 ? `seit ${std} h ${min % 60} min` : `seit ${std} h`
-  return `seit ${Math.floor(std / 24)} Tagen`
+  if (std < 24) return min % 60 ? `${std} h ${min % 60} min` : `${std} h`
+  return `${Math.floor(std / 24)} d`
 }
 
 const speicher = (n) => {
   if (!n) return ''
   const mb = n / (1024 * 1024)
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`
+}
+
+function speicherSummeVon(profil) {
+  return (profil.processes ?? []).reduce((s, p) => s + (p.memory ?? 0), 0)
+}
+
+/** Zustandstext für laufende Zeilen — Laufzeit und RAM als zwei Maßzahlen. */
+function metaLaufend(profil) {
+  return [dauer(profil.startedAt), speicher(speicherSummeVon(profil))].filter(Boolean).join(' · ')
 }
 
 const punktKlasse = (state) =>
@@ -308,10 +438,6 @@ function passtZurSuche(projekt) {
   )
 }
 
-function sternHtml(projekt) {
-  return `<button class="stern" data-aktion="favorit" data-projekt="${h(projekt.name)}" aria-pressed="${projekt.favorite ? 'true' : 'false'}" title="${projekt.favorite ? 'Favorit entfernen' : 'Als Favorit markieren'}">${projekt.favorite ? '★' : '☆'}</button>`
-}
-
 function githubHtml(projekt, { kurz = false } = {}) {
   const gh = projekt.github
   if (!gh?.url) return ''
@@ -329,7 +455,6 @@ function nameHtml(projekt, extraSub = '', { title } = {}) {
     ? ` title="${h(title)}"`
     : ` title="${h(ordnerGleich ? projekt.path : `${titel} · ${projekt.name}`)}"`
   return `<span class="name">
-    ${sternHtml(projekt)}
     <span class="name-text">
       <a data-aktion="detail" data-projekt="${h(projekt.name)}"${titleAttr}>${h(titel)}</a>
       ${ordner}${extraSub}
@@ -351,12 +476,32 @@ function slugGleich(a, b) {
 function listeKopfHtml() {
   return `<div class="liste-kopf" aria-hidden="true">
     <span></span>
+    <span></span>
     <span>Projekt</span>
     <span>Adresse</span>
     <span>Zustand</span>
     <span></span>
   </div>`
 }
+
+const iconPlay = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 2.6a.75.75 0 0 0-1.15.63v9.54a.75.75 0 0 0 1.15.63l7.7-4.77a.75.75 0 0 0 0-1.26L4.2 2.6Z"/></svg>`
+const iconStop = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>`
+const iconPlus = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.25a.75.75 0 0 1 .75.75v3.25H12a.75.75 0 0 1 0 1.5H8.75V12a.75.75 0 0 1-1.5 0V8.75H4a.75.75 0 0 1 0-1.5h3.25V4A.75.75 0 0 1 8 3.25Z"/></svg>`
+const iconExtern = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 3.25H3.75A1.5 1.5 0 0 0 2.25 4.75v7.5a1.5 1.5 0 0 0 1.5 1.5h7.5a1.5 1.5 0 0 0 1.5-1.5V9.5a.75.75 0 0 0-1.5 0v2.75h-7.5V4.75H6.5a.75.75 0 0 0 0-1.5Z"/><path d="M9.25 2.25h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0V4.56L9.28 8.28a.75.75 0 1 1-1.06-1.06l3.72-3.72H9.25a.75.75 0 0 1 0-1.5Z"/></svg>`
+const iconFinder = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.75 3.5A1.75 1.75 0 0 1 4.5 1.75h2.38c.36 0 .7.14.95.39l1.03 1.03c.1.1.23.15.37.15h2.27A1.75 1.75 0 0 1 13.25 5.07v7.18A1.75 1.75 0 0 1 11.5 14H4.5A1.75 1.75 0 0 1 2.75 12.25V3.5Zm1.5 0v8.75h7.25V5.07H8.78a1.75 1.75 0 0 1-1.24-.51L6.51 3.5H4.25Z"/></svg>`
+
+/** Primäre Power-Aktion links am Status — Start/Stop als Symbol, Slot als Plus. */
+function powerKnopfHtml(projekt, profil) {
+  if (!projekt.adopted) {
+    return `<button type="button" class="knopf symbol aufnehmen" data-aktion="aufnehmen" data-projekt="${h(projekt.name)}" title="Slot vergeben und Agent-Dateien schreiben" aria-label="Slot für ${h(projekt.name)} vergeben">${iconPlus}</button>`
+  }
+  const laeuft = profil.state === 'läuft' || profil.state === 'teilweise'
+  if (laeuft) {
+    return `<button type="button" class="knopf symbol stopp" data-aktion="stopp" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}" title="Stoppen" aria-label="${h(anzeigeName(projekt))} stoppen">${iconStop}</button>`
+  }
+  return `<button type="button" class="knopf symbol start" data-aktion="start" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}" title="Starten" aria-label="${h(anzeigeName(projekt))} starten">${iconPlay}</button>`
+}
+
 
 function aktionenMenu(gruppen) {
   const bloecke = (Array.isArray(gruppen[0]) ? gruppen : [gruppen])
@@ -421,19 +566,12 @@ function zeileHtml(projekt, profil) {
   const laeuft = profil.state === 'läuft' || profil.state === 'teilweise'
   const adresse = profil.processes.find((p) => p.role === 'frontend')?.url ?? profil.processes[0]?.url
   const konflikt = profil.processes.some((p) => p.foreign)
-  const speicherSumme = profil.processes.reduce((s, p) => s + (p.memory ?? 0), 0)
 
   const zustandText = laeuft
-    ? [dauer(profil.startedAt), speicher(speicherSumme)].filter(Boolean).join(' · ')
+    ? metaLaufend(profil)
     : projekt.adopted
       ? 'gestoppt'
       : 'kein Slot'
-
-  const primaer = !projekt.adopted
-    ? `<button class="knopf primaer" data-aktion="aufnehmen" data-projekt="${h(projekt.name)}" title="Vergibt einen festen Port und schreibt die Agent-Dateien">Slot vergeben</button>`
-    : laeuft
-      ? `<button class="knopf gefahr" data-aktion="stopp" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">Stoppen</button>`
-      : `<button class="knopf primaer" data-aktion="start" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">Starten</button>`
 
   const menu = zeilenMenu(projekt, {
     profil,
@@ -451,12 +589,13 @@ function zeileHtml(projekt, profil) {
     ? `<span class="hinweis">Ein fremder Prozess belegt ${h(profil.processes.filter((p) => p.foreign).map((p) => p.port).join(', '))} — der Hub hat ihn nicht gestartet.</span>`
     : ''
 
-  return `<div class="zeile${konflikt ? ' warnung' : ''}">
+  return `<div class="zeile${konflikt ? ' warnung' : ''}" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">
     <span class="${konflikt ? 'punkt warnung' : punktKlasse(profil.state)}"></span>
+    <span class="power">${powerKnopfHtml(projekt, profil)}</span>
     ${nameHtml(projekt, '', { title: nameTitel || undefined })}
     ${adresse ? `<a class="adr${laeuft ? '' : ' aus'}" href="${h(adresse)}" target="_blank" rel="noreferrer">${h(adresse.replace(/^https?:\/\//, ''))}</a>` : '<span class="adr aus">—</span>'}
     <span class="meta">${h(zustandText)}</span>
-    <span class="aktionen">${primaer}${menu}</span>
+    <span class="aktionen">${menu}</span>
     ${hinweis}
   </div>`
 }
@@ -466,28 +605,20 @@ function ohneStartHtml(projekt) {
   const kurz =
     /Sammelordner/.test(hinweis) ? 'Sammelordner'
     : /liegt in /.test(hinweis) ? 'Unterordner'
-    : /Python/.test(hinweis) ? 'braucht dev.json'
+    : /Kein venv/.test(hinweis) ? 'braucht venv'
+    : /Python/.test(hinweis) ? 'braucht Einstieg'
     : /Kein Server/.test(hinweis) ? 'kein Server'
-    : 'braucht dev.json'
+    : 'kein Start'
   const art = projekt.stack?.framework ?? projekt.stack?.kind
-  return `<div class="zeile">
+  // Kein Power-Knopf: hier lässt sich kein Slot vergeben — Name öffnet weiter Details.
+  return `<div class="zeile still" title="${h(hinweis)}">
     <span class="punkt"></span>
-    ${nameHtml(projekt, '', { title: art || undefined })}
+    <span class="power" aria-hidden="true"></span>
+    ${nameHtml(projekt, '', { title: art ? `${art} · ${hinweis}` : hinweis })}
     <span class="adr aus">—</span>
-    <span class="meta" title="${h(hinweis)}">${h(kurz)}</span>
-    <span class="aktionen">
-      <button class="knopf" data-aktion="detail" data-projekt="${h(projekt.name)}">Ansehen</button>
-      ${zeilenMenu(projekt, { mitAnsehen: false })}
-    </span>
+    <span class="meta">${h(kurz)}</span>
+    <span class="aktionen">${zeilenMenu(projekt, { mitAnsehen: true })}</span>
   </div>`
-}
-
-function passtZuFilter(projekt, profil) {
-  if (!passtZurSuche(projekt)) return false
-  if (zustand.filter === 'laufend') return profil.state === 'läuft' || profil.state === 'teilweise'
-  if (zustand.filter === 'gestoppt') return projekt.adopted && profil.state === 'gestoppt'
-  if (zustand.filter === 'ohne-port') return !projekt.adopted
-  return true
 }
 
 function rendereFuss() {
@@ -534,17 +665,19 @@ function listeGruppe(titel, zeilen) {
   </div>${zeilen.join('')}`
 }
 
-/** Getrennt von der Hauptliste: zugeklappt ohne Sektionslabel „Kein Port“. */
-function kandidatenAufklappHtml(zeilen) {
-  if (!zeilen.length) return ''
+/** Getrennt von der Hauptliste: zugeklappt. Nicht startbare Projekte hängen unten an. */
+function kandidatenAufklappHtml(kandidaten, ohneStart = []) {
+  if (!kandidaten.length && !ohneStart.length) return ''
 
   let offen = zustand.gruppenOffen['kein-port']
   if (offen === undefined) offen = false
   if (zustand.suche) offen = true
 
-  const n = zeilen.length
+  const n = kandidaten.length + ohneStart.length
   const zu =
     n === 1 ? '1 Projekt ohne Slot anzeigen' : `${n} Projekte ohne Slot anzeigen`
+
+  const stillTeil = ohneStart.length ? ohneStart.join('') : ''
 
   return `<details class="kandidaten" data-gruppe="kein-port"${offen ? ' open' : ''}>
     <summary>
@@ -554,7 +687,8 @@ function kandidatenAufklappHtml(zeilen) {
     </summary>
     <div class="liste kandidaten-liste">
       ${listeKopfHtml()}
-      ${zeilen.join('')}
+      ${kandidaten.join('')}
+      ${stillTeil}
     </div>
   </details>`
 }
@@ -566,82 +700,41 @@ function rendereUebersicht() {
   gruppenOffenMerken()
   rendereFuss()
 
-  const zaehlen = { alle: 0, laufend: 0, gestoppt: 0, 'ohne-port': 0 }
-  for (const projekt of daten.projects) {
-    if (!projekt.profiles.length) {
-      zaehlen.alle++
-      zaehlen['ohne-port']++
-      continue
-    }
-    for (const profil of projekt.profiles) {
-      zaehlen.alle++
-      if (!projekt.adopted) zaehlen['ohne-port']++
-      else if (profil.state === 'läuft' || profil.state === 'teilweise') zaehlen.laufend++
-      else zaehlen.gestoppt++
-    }
-  }
-  for (const chip of document.querySelectorAll('.filter .chip')) {
-    const key = chip.dataset.filter
-    const basis = { alle: 'Alle', laufend: 'Laufend', gestoppt: 'Gestoppt', 'ohne-port': 'Ohne Port' }[key]
-    chip.textContent = `${basis} · ${zaehlen[key] ?? 0}`
-    chip.setAttribute('aria-pressed', String(zustand.filter === key))
-  }
-
-  const favoriten = []
   const laufend = []
   const gestoppt = []
-  const ohnePort = []
+  const kandidaten = []
+  const ohneStart = []
 
   for (const projekt of daten.projects) {
-    // Ein Projekt ohne erkanntes Startkommando hat keine Profile — es darf
-    // trotzdem nicht aus der Liste fallen, sonst sucht man es vergeblich.
+    if (!passtZurSuche(projekt)) continue
+    // Kein Startkommando: kein Slot möglich — in der aufklappbaren Liste, unten und ruhig.
     if (!projekt.profiles.length) {
-      if (zustand.filter === 'laufend' || zustand.filter === 'gestoppt') continue
-      if (!passtZurSuche(projekt)) continue
-      const html = ohneStartHtml(projekt)
-      if (projekt.favorite) favoriten.push(html)
-      else ohnePort.push(html)
+      ohneStart.push(ohneStartHtml(projekt))
       continue
     }
     for (const profil of projekt.profiles) {
-      if (!passtZuFilter(projekt, profil)) continue
       const html = zeileHtml(projekt, profil)
-      if (projekt.favorite) {
-        favoriten.push(html)
-        continue
-      }
-      if (!projekt.adopted) ohnePort.push(html)
+      if (!projekt.adopted) kandidaten.push(html)
       else if (profil.state === 'läuft' || profil.state === 'teilweise') laufend.push(html)
       else gestoppt.push(html)
     }
   }
 
-  const hatSlotGruppen = favoriten.length || laufend.length || gestoppt.length
   const kandidatenEl = $('#kandidaten')
-
-  if (zustand.filter === 'ohne-port') {
-    $('#liste').innerHTML = ohnePort.length
-      ? listeKopfHtml() + ohnePort.join('')
-      : listeKopfHtml() + leerHtml()
-    if (kandidatenEl) kandidatenEl.innerHTML = ''
-    return
-  }
-
   const haupt = []
-  if (favoriten.length) haupt.push(listeGruppe('Favoriten', favoriten))
   if (laufend.length) haupt.push(listeGruppe('Läuft', laufend))
   if (gestoppt.length) haupt.push(listeGruppe('Gestoppt', gestoppt))
 
   if (haupt.length) {
     $('#liste').innerHTML = listeKopfHtml() + haupt.join('')
-  } else if (ohnePort.length && !zustand.suche) {
+  } else if ((kandidaten.length || ohneStart.length) && !zustand.suche) {
     $('#liste').innerHTML =
       listeKopfHtml() +
       `<div class="liste-intro">
         <strong>Noch keine Projekte mit Slot</strong>
         <p>Nimm ein Projekt auf, damit es hier mit festem Port erscheint. Kandidaten findest du darunter.</p>
       </div>`
-  } else if (ohnePort.length && zustand.suche) {
+  } else if ((kandidaten.length || ohneStart.length) && zustand.suche) {
     $('#liste').innerHTML =
       listeKopfHtml() +
       `<div class="liste-intro">
@@ -652,32 +745,17 @@ function rendereUebersicht() {
     $('#liste').innerHTML = listeKopfHtml() + leerHtml()
   }
 
-  if (kandidatenEl) kandidatenEl.innerHTML = kandidatenAufklappHtml(ohnePort)
+  if (kandidatenEl) {
+    kandidatenEl.innerHTML = kandidatenAufklappHtml(kandidaten, ohneStart)
+  }
 }
 
 function leerHtml() {
-  const texte = {
-    alle: {
-      titel: 'Keine Projekte gefunden',
-      text: zustand.suche
-        ? `Keine Treffer für „${zustand.suche}“. Filter oder Suche anpassen.`
-        : 'Unter ~/Dev wurden keine Kandidaten gefunden.'
-    },
-    laufend: {
-      titel: 'Nichts läuft gerade',
-      text: 'Starte ein Projekt über „Starten“, oder wechsle den Filter.'
-    },
-    gestoppt: {
-      titel: 'Keine gestoppten Server',
-      text: 'Aufgenommene Projekte, die gerade nicht laufen, erscheinen hier.'
-    },
-    'ohne-port': {
-      titel: 'Alle Projekte haben einen Slot',
-      text: 'Neue Ordner unter ~/Dev erscheinen hier, bis du sie aufnimmst.'
-    }
-  }
-  const t = texte[zustand.filter] ?? texte.alle
-  return `<div class="leer-box"><strong>${h(t.titel)}</strong><p>${h(t.text)}</p></div>`
+  const titel = 'Keine Projekte gefunden'
+  const text = zustand.suche
+    ? `Keine Treffer für „${zustand.suche}“. Suche anpassen.`
+    : 'Unter ~/Dev wurden keine Kandidaten gefunden.'
+  return `<div class="leer-box"><strong>${h(titel)}</strong><p>${h(text)}</p></div>`
 }
 
 // ------------------------------------------------------------------ Detail
@@ -730,6 +808,7 @@ function detailMenu(projekt, profil) {
 }
 
 function primaerAktionHtml(projekt, profil) {
+  // Detailansicht: Text bleibt lesbarer als reine Symbole.
   if (!projekt.adopted) {
     return `<button class="knopf primaer" data-aktion="aufnehmen" data-projekt="${h(projekt.name)}" title="Vergibt einen festen Port und schreibt die Agent-Dateien">Slot vergeben</button>`
   }
@@ -752,7 +831,7 @@ function prozessHtml(projekt, profil, proc) {
     proc.memory ? speicher(proc.memory) : null
   ].filter(Boolean)
 
-  return `<div class="prozess">
+  return `<div class="prozess" data-prozess="${h(proc.name)}">
     <span class="${proc.listening ? 'punkt laeuft' : 'punkt'}" aria-hidden="true"></span>
     <div class="prozess-haupt">
       <div class="prozess-zeile">
@@ -783,12 +862,12 @@ function profilKarteHtml(projekt, profil, { haupt = false } = {}) {
       ? 'Server'
       : `Profil ${profil.profile}`
 
-  return `<section class="karte server-karte${haupt ? ' haupt' : ''}">
+  return `<section class="karte server-karte${haupt ? ' haupt' : ''}" data-profil="${h(profil.profile)}">
     <div class="karte-kopf">
       <div class="server-status">
         <span class="${punktKlasse(profil.state)}" aria-hidden="true"></span>
         <h3>${h(titel)}</h3>
-        <span class="sub">${h(zustandLabel(profil))}</span>
+        <span class="sub meta-laufzeit">${h(zustandLabel(profil))}</span>
       </div>
       ${
         haupt
@@ -833,8 +912,9 @@ function agentenZeileHtml(eintrag) {
     : `${Math.max(1, Math.round(eintrag.size / 1024))} kB`
   return `<div class="agent-zeile">
     <span class="abzeichen" data-agent="${h(eintrag.agent)}">${h(eintrag.agent)}</span>
-    <button class="pfad-zelle" data-aktion="agent-datei" data-pfad="${h(eintrag.path)}">${h(eintrag.label)}${eintrag.directory ? '/' : ''}</button>
+    <button class="pfad-zelle" data-aktion="agent-datei" data-pfad="${h(eintrag.path)}" title="Vorschau">${h(eintrag.label)}${eintrag.directory ? '/' : ''}</button>
     <span class="meta">${h(groesse)} · ${h(eintrag.kind)}</span>
+    ${pfadAktionenHtml(eintrag.path, { kompakt: true })}
   </div>`
 }
 
@@ -941,7 +1021,7 @@ function rendereDetail() {
 
   const kopf = `<header class="detail-hero">
     <div class="detail-hero-text">
-      <h2>${sternHtml(projekt)} <span class="detail-titel">${h(titel)}</span>${
+      <h2><span class="detail-titel">${h(titel)}</span>${
         titel === projekt.name ? '' : ` <span class="sub">${h(projekt.name)}</span>`
       }</h2>
       <div class="detail-meta">
@@ -987,15 +1067,20 @@ function rendereDateiVorschau() {
   $('#datei-titel').textContent = v.directory ? v.path : v.name
   $('#datei-pfad').textContent = v.path
   $('#datei-pfad').title = v.path
+  const aktionen = $('#datei-aktionen')
+  if (aktionen) aktionen.innerHTML = pfadAktionenHtml(v.path, { schliessen: true })
 
   if (v.directory) {
     const kinder = v.children?.length
       ? v.children
           .map(
-            (c) => `<button type="button" class="datei-eintrag" data-aktion="agent-datei" data-pfad="${h(c.path)}">
-              <span class="datei-name">${h(c.name)}${c.directory ? '/' : ''}</span>
-              <span class="hint">${c.directory ? 'Ordner' : 'Datei'}</span>
-            </button>`
+            (c) => `<div class="datei-eintrag-zeile">
+              <button type="button" class="datei-eintrag" data-aktion="agent-datei" data-pfad="${h(c.path)}">
+                <span class="datei-name">${h(c.name)}${c.directory ? '/' : ''}</span>
+                <span class="hint">${c.directory ? 'Ordner' : 'Datei'}</span>
+              </button>
+              ${pfadAktionenHtml(c.path, { kompakt: true })}
+            </div>`
           )
           .join('')
       : '<div class="datei-leer">Leerer Ordner</div>'
@@ -1079,7 +1164,14 @@ async function rendereLog({ ruhig = false } = {}) {
         <span class="log-prozesse" role="toolbar" aria-label="Prozess wählen">${chips}</span>
         <span class="rechts">
           <label><input type="checkbox" id="folgen" ${zustand.log.folgen ? 'checked' : ''}> folgen</label>
-          <span class="meta" title="${h(daten.file)}">${h(daten.file)}</span>
+          ${
+            daten.file
+              ? `<span class="log-datei">
+                  <span class="meta" title="${h(daten.file)}">${h(daten.file)}</span>
+                  ${pfadAktionenHtml(daten.file, { kompakt: true })}
+                </span>`
+              : ''
+          }
         </span>
       </div>
       <pre class="log" id="log-inhalt">${
@@ -1257,7 +1349,6 @@ function listenSignaturVon(daten) {
       [
         p.name,
         p.displayName ?? '',
-        p.favorite ? 1 : 0,
         p.adopted ? 1 : 0,
         p.slot ?? '',
         JSON.stringify(p.profileSlots ?? {}),
@@ -1293,6 +1384,53 @@ function fussSignaturVon(daten) {
   ].join(':')
 }
 
+/**
+ * Laufzeit/RAM in bestehenden Zeilen nachziehen — ohne die Liste neu zu bauen
+ * (sonst flackert sie und offene Menüs schließen).
+ */
+function aktualisiereLaufendeMetas(daten) {
+  if (!daten?.projects) return
+  for (const projekt of daten.projects) {
+    for (const profil of projekt.profiles ?? []) {
+      const laeuft = profil.state === 'läuft' || profil.state === 'teilweise'
+      if (!laeuft) continue
+      const zeile = document.querySelector(
+        `#liste .zeile[data-projekt="${CSS.escape(projekt.name)}"][data-profil="${CSS.escape(profil.profile)}"]`
+      )
+      const meta = zeile?.querySelector(':scope > .meta')
+      if (meta) meta.textContent = metaLaufend(profil)
+    }
+  }
+}
+
+function aktualisiereDetailMetas(daten) {
+  const name = zustand.projekt
+  if (!name) return
+  const projekt = daten?.projects?.find((p) => p.name === name)
+  if (!projekt) return
+
+  for (const profil of projekt.profiles ?? []) {
+    const karte = document.querySelector(
+      `#detail .server-karte[data-profil="${CSS.escape(profil.profile)}"]`
+    )
+    if (!karte) continue
+    const laufzeit = karte.querySelector('.meta-laufzeit')
+    if (laufzeit) laufzeit.textContent = zustandLabel(profil)
+
+    for (const proc of profil.processes ?? []) {
+      const zeile = karte.querySelector(`.prozess[data-prozess="${CSS.escape(proc.name)}"]`)
+      const meta = zeile?.querySelector('.meta')
+      if (!meta) continue
+      const teile = [
+        proc.port != null ? `Port ${proc.port}` : null,
+        proc.pid ? `PID ${proc.pid}` : proc.runner === 'compose' ? 'compose' : null,
+        proc.memory ? speicher(proc.memory) : null
+      ].filter(Boolean)
+      meta.textContent = teile.join(' · ')
+    }
+  }
+}
+
 async function laden({ ohneRoute = false, ruhig = false } = {}) {
   if (zustand.ladenLaufend) return
   zustand.ladenLaufend = true
@@ -1322,7 +1460,12 @@ async function laden({ ohneRoute = false, ruhig = false } = {}) {
       return
     }
 
-    if (listeGleich) return
+    if (listeGleich) {
+      // Signatur bewusst ohne RAM — Laufzeit/MB trotzdem live nachziehen.
+      if (zustand.ansicht === 'uebersicht') aktualisiereLaufendeMetas(daten)
+      if (zustand.ansicht === 'detail') aktualisiereDetailMetas(daten)
+      return
+    }
 
     zustand.listenSignatur = listeNeu
     zustand._listeWartet = false
@@ -1374,21 +1517,13 @@ document.addEventListener('click', async (ereignis) => {
     return geheZu(routeLink.getAttribute('data-route') || routeLink.getAttribute('href') || '/')
   }
 
-  const ziel = ereignis.target.closest('[data-aktion], [data-filter]')
+  const ziel = ereignis.target.closest('[data-aktion]')
   if (!ziel) return
 
   const menu = ziel.closest('details.menu')
   if (menu && ziel.dataset.aktion) menu.open = false
 
-  if (ziel.dataset.filter) {
-    zustand.filter = ziel.dataset.filter
-    for (const chip of document.querySelectorAll('.filter .chip')) {
-      chip.setAttribute('aria-pressed', String(chip === ziel))
-    }
-    return rendereUebersicht()
-  }
-
-  const { aktion, projekt, profil, prozess, pfad } = ziel.dataset
+  const { aktion, projekt, profil, prozess, pfad, ziel: oeffnenZiel } = ziel.dataset
   const koerper = (extra = {}) => ({ method: 'POST', body: JSON.stringify({ profile: profil ?? 'default', ...extra }) })
 
   switch (aktion) {
@@ -1406,8 +1541,6 @@ document.addEventListener('click', async (ereignis) => {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
         zeigeSyncBericht(ergebnis, { titel: `Slot vergeben · Agent-Dateien für ${projekt}` })
       })
-    case 'favorit':
-      return handle(null, () => api(`/api/projects/${encodeURIComponent(projekt)}/favorite`, { method: 'POST', body: '{}' }))
     case 'anzeigename': {
       const aktuell = zustand.daten?.projects.find((p) => p.name === projekt)
       const vorschlag = aktuell?.displayName || aktuell?.suggestedDisplayName || projekt
@@ -1431,6 +1564,8 @@ document.addEventListener('click', async (ereignis) => {
     }
     case 'alle-stoppen':
       return handle(ziel, () => api('/api/down-all', { method: 'POST', body: '{}' }))
+    case 'hub-log':
+      return zeigeHubLog()
     case 'sync-projekt':
       return handle(ziel, async () => {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
@@ -1478,6 +1613,11 @@ document.addEventListener('click', async (ereignis) => {
       return handle(null, () => api('/api/open', { method: 'POST', body: JSON.stringify({ project: projekt }) }))
     case 'finder':
       return handle(null, () => api('/api/open', { method: 'POST', body: JSON.stringify({ project: projekt, finder: true }) }))
+    case 'pfad-oeffnen':
+      return handle(ziel, () => oeffnePfad(pfad, { finder: oeffnenZiel === 'finder' }))
+    case 'datei-schliessen':
+      schliesseDateiVorschau()
+      return
     case 'log':
       return oeffneLog(projekt, { profil: profil ?? 'default', prozess: prozess ?? null })
     case 'log-prozess':

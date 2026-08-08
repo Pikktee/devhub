@@ -10,6 +10,8 @@ import { syncAll, syncGlobal, syncProject, unsyncProject } from '../sync.js'
 import { cleanProjectArtifacts, listProjectArtifacts } from '../clean.js'
 import { serviceStatus } from '../service.js'
 import { instance } from '../paths.js'
+import { recordEvent, readHubLogTail } from '../history.js'
+import { assertOpenablePath, openLocalPath } from '../open.js'
 
 async function projectPayload(registry, project, { withMemory = false } = {}) {
   const profiles = []
@@ -33,7 +35,6 @@ async function projectPayload(registry, project, { withMemory = false } = {}) {
     title: project.displayName ?? project.name,
     hostLabel: project.hostLabel ?? null,
     suggestedDisplayName: project.suggestedDisplayName ?? null,
-    favorite: Boolean(project.favorite),
     path: project.path,
     slot: project.slot,
     profileSlots: project.profileSlots,
@@ -66,6 +67,7 @@ export async function overview({ withMemory = false } = {}) {
       port: registry.settings.hubPort,
       instance,
       domainSuffix: registry.settings.domainSuffix,
+      editor: registry.settings.editor ?? 'cursor',
       service: serviceStatus(),
       roots: registry.settings.roots
     },
@@ -167,6 +169,17 @@ export const routes = [
       const clean = cleanDeps ? cleanProjectArtifacts(projectPath) : { removed: [] }
       const removed = registryStore.removeProject(registry, name)
       registryStore.save(registry)
+      const changed = (files.changes ?? []).filter((c) => c.changed)
+      recordEvent({
+        type: 'forget',
+        project: name,
+        summary: `Slot ${slot} entfernt · ${changed.length} Dateiänderung${changed.length === 1 ? '' : 'en'}`,
+        lines: [
+          `Slot ${slot} bleibt gesperrt`,
+          ...changed.map((c) => `${c.action ?? 'geändert'}: ${c.file}`),
+          ...(clean.removed ?? []).map((r) => `gelöscht: ${r.name}`)
+        ]
+      })
       return {
         name,
         removed,
@@ -175,21 +188,6 @@ export const routes = [
         unsync: files,
         clean
       }
-    }
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/projects\/([^/]+)\/favorite$/,
-    handler: async (_req, [name], _query, body) => {
-      const registry = registryStore.load()
-      const project = describeProject(registry, name)
-      if (!project) throw Object.assign(new Error(`${name} ist unbekannt`), { status: 404 })
-      const favorite =
-        body.favorite === undefined
-          ? registryStore.toggleFavorite(registry, name)
-          : registryStore.setFavorite(registry, name, Boolean(body.favorite))
-      registryStore.save(registry)
-      return { name, favorite }
     }
   },
   {
@@ -272,8 +270,22 @@ export const routes = [
         ? [syncProject(registry, body.project, { dryRun: Boolean(body.dryRun) })]
         : syncAll(registry, { dryRun: Boolean(body.dryRun) })
       const global = body.global ? syncGlobal({ dryRun: Boolean(body.dryRun), withHook: Boolean(body.hook) }) : []
+      if (!body.dryRun) {
+        const changed = [...results.flatMap((r) => r.changes ?? []), ...global].filter((c) => c.changed)
+        recordEvent({
+          type: 'sync',
+          project: body.project ?? (body.global ? 'global' : 'alle'),
+          summary: `${changed.length} Datei${changed.length === 1 ? '' : 'en'} geändert`,
+          lines: changed.map((c) => `${c.action ?? 'geändert'}: ${c.file}`)
+        })
+      }
       return { results, global }
     }
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hub-log$/,
+    handler: async (_req, _params, query) => readHubLogTail(Number(query.get('lines') ?? 120))
   },
   {
     method: 'POST',
@@ -288,6 +300,13 @@ export const routes = [
       if (body.url) {
         spawn('open', [body.url], { detached: true, stdio: 'ignore' }).unref()
         return { opened: body.url }
+      }
+      if (body.path) {
+        const target = assertOpenablePath(registry, body.path)
+        return openLocalPath(target, {
+          finder: Boolean(body.finder),
+          editor: registry.settings.editor ?? 'cursor'
+        })
       }
       const project = describeProject(registry, body.project)
       if (!project) throw Object.assign(new Error('Unbekanntes Projekt'), { status: 404 })

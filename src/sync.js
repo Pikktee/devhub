@@ -4,7 +4,7 @@ import { claudeHome, codexHome, cursorHome, hubLogFile } from './paths.js'
 import { describeProject } from './discovery.js'
 import { removeLaunchJson, writeLaunchJson, hookScript } from './adapters/claude.js'
 import { removeCursorRule, writeCursorRule } from './adapters/cursor.js'
-import { ensureGitignore, localContractText, portableContractText, removeBlock, writeBlock } from './adapters/contract.js'
+import { ensureGitignore, localContractText, removeBlock, writeBlock } from './adapters/contract.js'
 import { logLine, openLog } from './runners/process.js'
 import { readJson, writeJson } from './util/json.js'
 
@@ -55,12 +55,10 @@ export function syncProject(registry, name, { dryRun = false } = {}) {
   if (!project.adopted) throw new Error(`"${name}" ist nicht aufgenommen`)
 
   const instances = instancesOf(project)
-  const portable = portableContractText({ project: name })
   const lokal = localContractText({ project: name, hubPort: registry.settings.hubPort, instances })
   const changes = []
 
-  // Repo-tauglich: AGENTS.md ohne Ports. Lokal: Cursor-Regel + launch.json + gitignore.
-  changes.push({ adapter: 'neutral', ...writeBlock(join(project.path, 'AGENTS.md'), portable, { dryRun }) })
+  // Nur lokal und gitignoriert — kein AGENTS.md im Repo (globale Regeln reichen).
   changes.push({
     adapter: 'cursor',
     ...writeCursorRule(join(project.path, '.cursor'), lokal, {
@@ -88,19 +86,20 @@ export function syncProject(registry, name, { dryRun = false } = {}) {
     ? []
     : protokolliere('sync', name, project.path, changes, [
         `  Slot ${project.slot} · ${adressenKurz(instances) || 'keine Ports'}`,
-        '  AGENTS.md: portabel (ohne Ports) · Rest lokal + gitignore'
+        '  nur lokal: Cursor-Regel + launch.json + gitignore'
       ])
 
   return { project: name, path: project.path, slot: project.slot, instances, changes, log }
 }
 
-/** Macht den Sync rückgängig: Hub-Blöcke und Hub-Dateien im Projekt entfernen. */
+/** Macht den Sync rückgängig: lokale Hub-Dateien und ggf. alten AGENTS.md-Block entfernen. */
 export function unsyncProject(registry, name, { dryRun = false } = {}) {
   const project = describeProject(registry, name)
   if (!project) throw new Error(`Projekt "${name}" ist unbekannt`)
 
   const changes = []
   changes.push({ adapter: 'claude', ...removeLaunchJson(project.path, { dryRun }) })
+  // Frühere Syncs schrieben einen Block in AGENTS.md — beim Forget aufräumen.
   changes.push({ adapter: 'neutral', ...removeBlock(join(project.path, 'AGENTS.md'), { dryRun }) })
   changes.push({ adapter: 'cursor', ...removeCursorRule(join(project.path, '.cursor'), { dryRun }) })
 

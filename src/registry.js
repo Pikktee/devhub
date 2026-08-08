@@ -13,32 +13,40 @@ export const DEFAULT_SETTINGS = {
   readyTimeoutMs: 60000
 }
 
-const EMPTY = { version: 1, settings: {}, projects: {}, favorites: [], displayNames: {}, retiredSlots: [] }
+const EMPTY = { version: 1, settings: {}, projects: {}, displayNames: {}, retiredSlots: [] }
+
+function stripLegacyFavorite(entry) {
+  if (!entry || typeof entry !== 'object') return entry
+  const { favorite: _legacy, ...rest } = entry
+  return rest
+}
 
 export function load() {
   const raw = readJson(registryFile, EMPTY)
-  const favorites = new Set(Array.isArray(raw.favorites) ? raw.favorites : [])
+  const projects = {}
   for (const [name, entry] of Object.entries(raw.projects ?? {})) {
-    if (entry?.favorite) favorites.add(name)
+    projects[name] = stripLegacyFavorite(entry)
   }
   return {
     version: raw.version ?? 1,
     settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
-    projects: raw.projects ?? {},
-    // Favoriten und Anzeigenamen leben getrennt von der Slot-Vergabe, damit
-    // man ein Projekt markieren kann, bevor es aufgenommen ist.
-    favorites: [...favorites].sort((a, b) => a.localeCompare(b, 'de')),
+    projects,
+    // Anzeigenamen leben getrennt von der Slot-Vergabe, damit man einen Titel
+    // setzen kann, bevor das Projekt aufgenommen ist.
     displayNames: raw.displayNames && typeof raw.displayNames === 'object' ? raw.displayNames : {},
     retiredSlots: raw.retiredSlots ?? []
   }
 }
 
 export function save(registry) {
+  const projects = {}
+  for (const [name, entry] of Object.entries(registry.projects ?? {})) {
+    projects[name] = stripLegacyFavorite(entry)
+  }
   writeJson(registryFile, {
     version: 1,
     settings: registry.settings,
-    projects: registry.projects,
-    favorites: registry.favorites ?? [],
+    projects,
     displayNames: registry.displayNames ?? {},
     retiredSlots: registry.retiredSlots
   })
@@ -78,31 +86,6 @@ export function addProject(registry, { name, path, slot, displayName }) {
   }
   registry.projects[name] = entry
   return entry
-}
-
-export function isFavorite(registry, name) {
-  return (registry.favorites ?? []).includes(name)
-}
-
-export function setFavorite(registry, name, favorite = true) {
-  registry.favorites ??= []
-  const on = Boolean(favorite)
-  const i = registry.favorites.indexOf(name)
-  if (on && i < 0) {
-    registry.favorites.push(name)
-    registry.favorites.sort((a, b) => a.localeCompare(b, 'de'))
-  } else if (!on && i >= 0) {
-    registry.favorites.splice(i, 1)
-  }
-  if (registry.projects[name]) {
-    if (on) registry.projects[name].favorite = true
-    else delete registry.projects[name].favorite
-  }
-  return on
-}
-
-export function toggleFavorite(registry, name) {
-  return setFavorite(registry, name, !isFavorite(registry, name))
 }
 
 export function displayNameOf(registry, name) {

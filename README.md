@@ -60,7 +60,7 @@ Danach Projekte aufnehmen und starten:
 ```bash
 devhub list
 devhub adopt mein-projekt          # vergibt festen Slot / Port
-devhub sync                        # Verträge in die Projekt-Repos
+devhub sync                        # lokale Agent-Dateien (Ports) im Projekt
 devhub up mein-projekt
 devhub status mein-projekt
 open http://devhub.localhost:4000
@@ -111,7 +111,7 @@ Backends meist als `http://127.0.0.1:…`.
 | `devhub list` | Alle erkannten Projekte |
 | `devhub adopt <projekt>` | Slot vergeben |
 | `devhub forget <projekt>` | Aus der Registry (Slot bleibt gesperrt) |
-| `devhub sync [--global]` | Agent-Dateien schreiben |
+| `devhub sync [--global]` | lokale Agent-Dateien / globale Regeln schreiben |
 | `devhub agents [projekt]` | Regeln / Skills / Memory anzeigen |
 | `devhub link [projekt]` | `AGENTS.md` ↔ `CLAUDE.md` verknüpfen |
 | `devhub doctor` | Kollisionen und Ungereimtheiten |
@@ -149,9 +149,12 @@ Agents sollen **keine** eigenen Dev-Server starten (`npm run dev`, `vite`,
 
 ### Was `devhub sync` schreibt
 
+Nur **lokale** Dateien im Projekt (nicht fürs Repo gedacht) plus einen
+gitignore-Marker. Die allgemeine „keine eigenen Dev-Server“-Regel liegt
+global auf der Maschine (`sync --global`), nicht in jedem Projekt-Repo.
+
 | Datei | Ins Git? | Inhalt |
 | --- | --- | --- |
-| `AGENTS.md` (zwischen HTML-Ankern) | ja | Portabler Hinweis: mit Hub nutzen, ohne Hub wie üblich |
 | `.cursor/rules/devhub.local.mdc` | nein | Ports dieser Maschine |
 | `.claude/launch.json` | nein | Nur Attach-URLs, keine Startkommandos |
 | `.gitignore` (Marker `# >>> devhub`) | ja | Lokale Hub-Dateien ausnehmen |
@@ -180,7 +183,7 @@ Unterordner einzeln aufnehmen: `devhub adopt monorepo/app`.
 
 ### Optional: `dev.json`
 
-Wenn die Ableitung nicht passt (Python, Compose, Sonderfälle):
+Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle):
 
 ```json
 {
@@ -206,7 +209,9 @@ Wenn die Ableitung nicht passt (Python, Compose, Sonderfälle):
 Platzhalter: `{port}`, `{host}`, `{url}`, `{project}`, `{profile}`, `{path}`  
 (deutsche Schlüsselnamen werden ebenso akzeptiert.)
 
-Python-Beispiel mit venv-Interpreter:
+Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)
+wird ohne `dev.json` abgeleitet — bei vorhandenem `.venv` mit dessen Interpreter.
+Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 
 ```json
 {
@@ -238,7 +243,7 @@ Python-Beispiel mit venv-Interpreter:
 
 | Was | Wo |
 | --- | --- |
-| Registry (Slots, Favoriten, Einstellungen) | `~/.config/devhub/registry.json` |
+| Registry (Slots, Anzeigenamen, Einstellungen) | `~/.config/devhub/registry.json` |
 | Laufzustand | `~/.local/state/devhub/state.json` |
 | Logs | `~/.local/state/devhub/logs/` |
 | launchd | `~/Library/LaunchAgents/dev.local.devhub.plist` |
@@ -263,7 +268,7 @@ Optional aufräumen:
 | Cursor-Skill | `rm -rf ~/.cursor/skills/devhub` |
 | Globale Agent-Regeln | Block zwischen den `devhub`-Ankern in `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc`, `~/.codex/AGENTS.md` (oder die Dateien löschen, falls sie nur Hub-Inhalt hatten) |
 | Registry & State | `rm -rf ~/.config/devhub ~/.local/state/devhub` |
-| Projekt-Verträge | In jedem Repo den Block in `AGENTS.md` sowie lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` — oder pro Projekt `devhub forget <ordner>` (entfernt die Hub-Blöcke, behält den Slot gesperrt) |
+| Projekt-Verträge | Lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` — oder pro Projekt `devhub forget <ordner>` (entfernt Hub-Dateien, behält den Slot gesperrt). Alte `AGENTS.md`-Blöcke von früheren Syncs räumt Forget ebenfalls auf. |
 
 Das geklonte Repo-Verzeichnis kannst du danach einfach löschen. Ohne `service uninstall` würde launchd den Hub nach dem Löschen des Ordners weiter starten wollen und scheitern.
 
@@ -297,10 +302,10 @@ Weil der nächste Agent (oder du in einem zweiten Terminal) dasselbe nochmal
 startet. Ohne festen Port weichen Vite/Next oft aus — dann reden Frontend und
 Mensch von verschiedenen Welten. Der Hub hält **eine** Instanz auf **einer** Nummer.
 
-### Überschreibt sync meine AGENTS.md?
+### Schreibt sync noch in meine AGENTS.md?
 
-Nur den Block zwischen `<!-- devhub:anfang -->` und `<!-- devhub:ende -->`.
-Alles davor und danach bleibt.
+Nein. Sync schreibt nur lokale, gitignorierte Dateien plus den gitignore-Marker.
+Einen älteren Hub-Block in `AGENTS.md` entfernt `devhub forget` bzw. unsync.
 
 ### Funktioniert das unter Linux oder Windows?
 
@@ -309,7 +314,9 @@ systemd o. Ä. wären willkommen, sind aber noch nicht gebaut.
 
 ### Muss jedes Projekt `dev.json` haben?
 
-Nein. Node mit üblichem Dev-Skript meist automatisch. `dev.json` für Sonderfälle.
+Nein. Node mit üblichem Dev-Skript und einfaches Python (`app.py`/`main.py` mit
+`PORT`) meist automatisch. `dev.json` für Compose, uvicorn-Modulpfade und
+Sonderfälle.
 
 ### Kann ich die Registry / Ports von einem Mac auf den anderen kopieren?
 

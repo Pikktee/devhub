@@ -28,6 +28,7 @@
       </a>
     </div>
     <div class="kopf-aktionen">
+      <button class="knopf leise" data-aktion="hub-log" title="Hub-Log / Verlauf">Verlauf</button>
       <button class="knopf gefahr" data-aktion="alle-stoppen" title="Alle laufenden Server stoppen">Alle stoppen</button>
     </div>
   </div>
@@ -37,18 +38,12 @@
 
 <div id="inhalt">
   <main id="uebersicht">
-    <div class="filter" role="toolbar" aria-label="Filter">
-      <div class="filter-chips">
-        <button class="chip" data-filter="alle" aria-pressed="true">Alle</button>
-        <button class="chip" data-filter="laufend" aria-pressed="false">Laufend</button>
-        <button class="chip" data-filter="gestoppt" aria-pressed="false">Gestoppt</button>
-        <button class="chip chip-neben" data-filter="ohne-port" aria-pressed="false" title="Projekte ohne zugewiesenen Slot">Ohne Port</button>
-      </div>
+    <div class="suche-zeile">
       <label class="suche-feld">
         <span class="suche-icon" aria-hidden="true">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
-        <input class="suche" id="suche" type="search" placeholder="Projekt filtern …" autocomplete="off" spellcheck="false" aria-label="Projekt filtern">
+        <input class="suche" id="suche" type="search" placeholder="Projekt suchen …" autocomplete="off" spellcheck="false" aria-label="Projekt suchen">
         <kbd class="suche-taste" aria-hidden="true">/</kbd>
       </label>
     </div>
@@ -72,17 +67,17 @@
     <h2 id="protokoll-titel">Protokoll</h2>
     <button class="knopf leise" value="ok" aria-label="Schließen">Schließen</button>
   </form>
-  <pre class="protokoll-text" id="protokoll-text"></pre>
+  <div class="protokoll-koerper" id="protokoll-koerper"></div>
 </dialog>
 
 <dialog id="datei" class="datei-dialog" aria-labelledby="datei-titel">
-  <form method="dialog" class="datei-kopf">
+  <div class="datei-kopf">
     <div class="datei-kopf-text">
       <h2 id="datei-titel">Datei</h2>
       <p class="datei-pfad" id="datei-pfad"></p>
     </div>
-    <button class="knopf leise" value="ok" aria-label="Schließen">Schließen</button>
-  </form>
+    <div class="datei-kopf-aktionen" id="datei-aktionen"></div>
+  </div>
   <div class="datei-koerper" id="datei-koerper"></div>
 </dialog>
 

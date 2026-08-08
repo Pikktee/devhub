@@ -123,10 +123,9 @@ export function globalContext(projectPath) {
 }
 
 const GAP_CHECKS = [
-  { path: 'AGENTS.md', hint: 'Kein agent-neutraler Hinweis — "devhub sync" schreibt einen portablen Block' },
   { path: '.cursor/rules/devhub.local.mdc', hint: 'Keine lokale Cursor-Regel — "devhub sync" schreibt Ports nur lokal' },
   { path: '.claude/launch.json', hint: 'Keine Attach-Datei — "devhub sync" erzeugt sie lokal (gitignore)' },
-  { path: 'dev.json', hint: 'Kein dev.json — der Hub leitet den Start aus package.json ab' }
+  { path: 'dev.json', hint: 'Kein dev.json — der Hub leitet den Start oft aus package.json / app.py ab' }
 ]
 
 export function agentContext(projectPath, { includeGlobal = true } = {}) {

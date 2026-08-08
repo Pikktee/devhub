@@ -252,7 +252,7 @@ async function cmdList() {
   const registry = registryStore.load()
   const projects = listProjects(registry)
   const rows = projects.map((project) => [
-    project.favorite ? color.yellow('★') : project.adopted ? color.green('✓') : color.dim('·'),
+    project.adopted ? color.green('✓') : color.dim('·'),
     project.displayName === project.name ? project.name : `${project.displayName} ${color.dim(`(${project.name})`)}`,
     project.stack?.framework ?? project.stack?.kind ?? '—',
     project.adopted ? String(project.slot) : color.dim('—'),
@@ -261,11 +261,8 @@ async function cmdList() {
   ])
   console.log(table(rows, { head: ['', 'PROJEKT', 'ART', 'SLOT', 'QUELLE', 'HINWEIS'] }))
   const open = projects.filter((p) => !p.adopted).length
-  const favorites = projects.filter((p) => p.favorite).length
   console.log(
-    color.dim(
-      `\n${projects.length - open} aufgenommen · ${open} ohne Slot · ${favorites} Favorit${favorites === 1 ? '' : 'en'} ("devhub adopt <projekt>")`
-    )
+    color.dim(`\n${projects.length - open} aufgenommen · ${open} ohne Slot ("devhub adopt <projekt>")`)
   )
 }
 
@@ -312,7 +309,7 @@ async function cmdAdopt(positionals, flags) {
   }
   console.log(color.dim(`  Quelle: ${project.source}`))
   for (const problem of project.problems) console.warn(color.yellow('  ! ') + problem)
-  console.log(color.dim(`\n"devhub sync --projekt ${name}" schreibt den Vertrag in die Agent-Dateien.`))
+  console.log(color.dim(`\n"devhub sync --projekt ${name}" schreibt lokale Agent-Dateien (Cursor-Regel, launch.json).`))
 }
 
 async function cmdForget(positionals, flags) {
@@ -338,22 +335,6 @@ async function cmdForget(positionals, flags) {
   registryStore.removeProject(registry, name)
   registryStore.save(registry)
   console.log(`${color.dim('○')} ${name} entfernt — Slot ${slot} bleibt gesperrt, damit alte Adressen nichts Fremdes öffnen.`)
-}
-
-async function cmdFavorite(positionals, flags) {
-  const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
-  if (!name) return fail('Aufruf: dev favorite <projekt>')
-  const project = describeProject(registry, name)
-  if (!project) return fail(`${name} ist unbekannt`)
-  const on = flags.off ? false : flags.on ? true : !project.favorite
-  registryStore.setFavorite(registry, name, on)
-  registryStore.save(registry)
-  console.log(on ? `${color.yellow('★')} ${name} ist Favorit` : `${color.dim('☆')} ${name} kein Favorit mehr`)
-}
-
-async function cmdUnfavorite(positionals) {
-  return cmdFavorite(positionals, { off: true })
 }
 
 // ---------------------------------------------------------------- sync
@@ -640,10 +621,8 @@ const HELP = `devhub — die Dev-Server gehören dem Hub, nicht der Sitzung
   devhub ports                         Slot- und Portvergabe
   devhub list                          alle erkannten Projekte
   devhub adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
-  devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; Agent-Blöcke werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
-  devhub favorite <projekt>            Favorit setzen/umschalten (--aus zum Entfernen)
-  devhub unfavorite <projekt>          Favorit entfernen
-  devhub sync [--projekt x] [--global] Agent-Dateien schreiben (--probelauf zeigt nur)
+  devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; lokale Hub-Dateien werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
+  devhub sync [--projekt x] [--global] lokale Agent-Dateien schreiben (--probelauf zeigt nur)
   devhub agents [projekt]              Regeln, Skills und Memory des Projekts
   devhub link [projekt] [--alle]       AGENTS.md und CLAUDE.md verknüpfen (ohne Argument: Bericht)
   devhub doctor                        Kollisionen und Ungereimtheiten
@@ -669,8 +648,6 @@ const COMMANDS = {
   list: cmdList,
   adopt: cmdAdopt,
   forget: cmdForget,
-  favorite: cmdFavorite,
-  unfavorite: cmdUnfavorite,
   sync: cmdSync,
   agents: cmdAgents,
   link: cmdLink,
