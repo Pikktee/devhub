@@ -7,8 +7,8 @@ const zustand = {
   daten: null,
   ansicht: 'uebersicht',
   projekt: null,
-  suche: '',
   log: { profil: 'default', prozess: null, folgen: true },
+  verlauf: { datei: null, eintraege: [], signatur: '' },
   agenten: null,
   agentenProjekt: null,
   vorschau: null,
@@ -18,7 +18,9 @@ const zustand = {
   fussSignatur: '',
   logSignatur: '',
   pollTimer: null,
-  ladenLaufend: false
+  ladenLaufend: false,
+  befehl: { query: '', index: 0, treffer: [], ebene: 'root', projekt: null },
+  einstellungen: { geladen: null, draft: null, dirty: false, speichern: false, hinweis: '' }
 }
 
 // ------------------------------------------------------------------ Netz
@@ -211,20 +213,297 @@ function zeigeSyncBericht(ergebnis, optionen = {}) {
   })
 }
 
-async function zeigeHubLog() {
+function oeffneVerlauf({ ersetzen = false } = {}) {
+  schliesseDateiVorschau()
+  return geheZu('/verlauf', { ersetzen })
+}
+
+function oeffneEinstellungen({ ersetzen = false } = {}) {
+  schliesseDateiVorschau()
+  return geheZu('/einstellungen', { ersetzen })
+}
+
+function einstellungenKlon(daten) {
+  return {
+    roots: [...(daten.roots ?? [])],
+    hubPort: daten.hubPort,
+    domainSuffix: daten.domainSuffix,
+    editor: daten.editor,
+    showGlobalAgentContext: Boolean(daten.showGlobalAgentContext),
+    readyTimeoutMs: daten.readyTimeoutMs,
+    registryFile: daten.registryFile
+  }
+}
+
+function einstellungenDirty() {
+  const { geladen, draft } = zustand.einstellungen
+  if (!geladen || !draft) return false
+  return (
+    geladen.hubPort !== draft.hubPort ||
+    geladen.domainSuffix !== draft.domainSuffix ||
+    geladen.editor !== draft.editor ||
+    geladen.showGlobalAgentContext !== draft.showGlobalAgentContext ||
+    geladen.readyTimeoutMs !== draft.readyTimeoutMs ||
+    JSON.stringify(geladen.roots) !== JSON.stringify(draft.roots)
+  )
+}
+
+async function ladeEinstellungen({ erzwingen = false } = {}) {
+  if (!erzwingen && zustand.einstellungen.geladen && !zustand.einstellungen.dirty) {
+    return zustand.einstellungen.geladen
+  }
+  const daten = await api('/api/settings')
+  zustand.einstellungen.geladen = einstellungenKlon(daten)
+  zustand.einstellungen.draft = einstellungenKlon(daten)
+  zustand.einstellungen.dirty = false
+  zustand.einstellungen.hinweis = ''
+  return daten
+}
+
+function rendereEinstellungen() {
+  const ziel = $('#einstellungen')
+  if (!ziel) return
+  const draft = zustand.einstellungen.draft
+  if (!draft) {
+    ziel.innerHTML = `<div class="laden" aria-busy="true">lädt …</div>`
+    return
+  }
+
+  const dirty = einstellungenDirty()
+  zustand.einstellungen.dirty = dirty
+  const timeoutSek = Math.round((draft.readyTimeoutMs ?? 60000) / 1000)
+  const portHinweis =
+    zustand.einstellungen.geladen && draft.hubPort !== zustand.einstellungen.geladen.hubPort
+      ? `<p class="einst-warnung">Port-Änderung wird erst nach Neustart des Hubs wirksam (<span class="mono">devhub service restart</span>).</p>`
+      : ''
+
+  ziel.innerHTML = `
+    <header class="einst-hero">
+      <div class="einst-hero-text">
+        <h2>Einstellungen</h2>
+        <p class="einst-untertitel">Globale Hub-Konfiguration für diese Maschine</p>
+      </div>
+      <div class="einst-hero-meta">
+        ${
+          draft.registryFile
+            ? `<span class="einst-datei" title="${h(draft.registryFile)}">
+                <span class="meta mono">${h(draft.registryFile)}</span>
+                <span class="pfad-aktionen">
+                  <button type="button" class="knopf symbol leise" data-aktion="oeffnen" data-pfad="${h(draft.registryFile)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">↗</button>
+                </span>
+              </span>`
+            : ''
+        }
+      </div>
+    </header>
+
+    <form class="einst-form" id="einst-form" novalidate>
+      <div class="einst-blatt">
+        <section class="einst-sektion">
+          <div class="einst-sektion-kopf">
+            <span class="einst-kicker">01</span>
+            <div>
+              <h3>Projekte</h3>
+              <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
+            </div>
+          </div>
+          <div class="einst-feld">
+            <div class="einst-roots" id="einst-roots">
+              ${
+                draft.roots.length
+                  ? draft.roots
+                      .map(
+                        (pfad, i) => `<div class="einst-root">
+                    <span class="einst-root-mark" aria-hidden="true"></span>
+                    <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
+                    <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="Wurzel entfernen">×</button>
+                  </div>`
+                      )
+                      .join('')
+                  : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
+              }
+            </div>
+            <div class="einst-root-neu">
+              <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder /Users/…/Projekte" autocomplete="off" spellcheck="false">
+              <button type="button" class="knopf" data-einst="root-dazu">Hinzufügen</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="einst-sektion">
+          <div class="einst-sektion-kopf">
+            <span class="einst-kicker">02</span>
+            <div>
+              <h3>Hub</h3>
+              <p>Adresse und Domain für lokale Dev-Server.</p>
+            </div>
+          </div>
+          <div class="einst-raster">
+            <label class="einst-feld">
+              <span class="einst-label">Hub-Port</span>
+              <input type="number" name="hubPort" class="einst-input mono" min="1024" max="65535" step="1" value="${h(draft.hubPort)}" required>
+              <span class="einst-hilfe">Übersicht unter <span class="mono">http://devhub.localhost:${h(draft.hubPort)}</span></span>
+            </label>
+            <label class="einst-feld">
+              <span class="einst-label">Domain-Suffix</span>
+              <input type="text" name="domainSuffix" class="einst-input mono" value="${h(draft.domainSuffix)}" required autocomplete="off" spellcheck="false">
+              <span class="einst-hilfe">Projektadressen wie <span class="mono">name.${h(draft.domainSuffix)}</span></span>
+            </label>
+          </div>
+          ${portHinweis}
+        </section>
+
+        <section class="einst-sektion">
+          <div class="einst-sektion-kopf">
+            <span class="einst-kicker">03</span>
+            <div>
+              <h3>Werkzeuge</h3>
+              <p>Was „Im Editor öffnen“ startet.</p>
+            </div>
+          </div>
+          <div class="einst-raster">
+            <label class="einst-feld">
+              <span class="einst-label">Editor-Kommando</span>
+              <input type="text" name="editor" class="einst-input mono" list="einst-editor-vorschlaege" value="${h(draft.editor)}" required autocomplete="off" spellcheck="false">
+              <datalist id="einst-editor-vorschlaege">
+                <option value="cursor"></option>
+                <option value="code"></option>
+                <option value="zed"></option>
+                <option value="subl"></option>
+              </datalist>
+              <span class="einst-hilfe">Muss im PATH liegen (z. B. cursor, code, zed).</span>
+            </label>
+            <label class="einst-feld">
+              <span class="einst-label">Bereitschafts-Timeout</span>
+              <div class="einst-timeout">
+                <input type="number" name="readyTimeoutSek" class="einst-input mono" min="5" max="600" step="1" value="${h(timeoutSek)}" required>
+                <span class="einst-timeout-einheit">Sekunden</span>
+              </div>
+              <span class="einst-hilfe">Wie lange der Hub auf den Port eines gestarteten Servers wartet.</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="einst-sektion">
+          <div class="einst-sektion-kopf">
+            <span class="einst-kicker">04</span>
+            <div>
+              <h3>Agenten</h3>
+              <p>Kontext für Coding-Agenten in der Detailansicht.</p>
+            </div>
+          </div>
+          <label class="einst-schalter">
+            <span class="einst-schalter-text">
+              <strong>Globale Agent-Dateien zeigen</strong>
+              <span>CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis mit auflisten.</span>
+            </span>
+            <input type="checkbox" name="showGlobalAgentContext" ${draft.showGlobalAgentContext ? 'checked' : ''}>
+            <span class="einst-schalter-ui" aria-hidden="true"></span>
+          </label>
+        </section>
+      </div>
+
+      <div class="einst-leiste">
+        <div class="einst-leiste-status" aria-live="polite">
+          ${
+            zustand.einstellungen.hinweis
+              ? `<span class="einst-hinweis">${h(zustand.einstellungen.hinweis)}</span>`
+              : dirty
+                ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
+                : `<span class="einst-sauber">Alles gespeichert</span>`
+          }
+        </div>
+        <div class="einst-leiste-aktionen">
+          <button type="button" class="knopf leise" data-einst="zuruecksetzen" ${dirty ? '' : 'disabled'}>Zurücksetzen</button>
+          <button type="submit" class="knopf primaer" data-einst="speichern" ${dirty && !zustand.einstellungen.speichern ? '' : 'disabled'}>
+            ${zustand.einstellungen.speichern ? 'Speichert …' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </form>
+  `
+}
+
+function einstellungenAusForm(form) {
+  const draft = zustand.einstellungen.draft
+  if (!draft || !form) return draft
+  const hubPort = Number(form.hubPort?.value)
+  const domainSuffix = String(form.domainSuffix?.value ?? '').trim()
+  const editor = String(form.editor?.value ?? '').trim()
+  const readyTimeoutSek = Number(form.readyTimeoutSek?.value)
+  return {
+    ...draft,
+    hubPort,
+    domainSuffix,
+    editor,
+    showGlobalAgentContext: Boolean(form.showGlobalAgentContext?.checked),
+    readyTimeoutMs: Math.round(readyTimeoutSek * 1000)
+  }
+}
+
+function syncEinstellungenDraftAusForm() {
+  const form = $('#einst-form')
+  if (!form || !zustand.einstellungen.draft) return
+  zustand.einstellungen.draft = einstellungenAusForm(form)
+  zustand.einstellungen.dirty = einstellungenDirty()
+  zustand.einstellungen.hinweis = ''
+  const dirty = zustand.einstellungen.dirty
+  const status = form.querySelector('.einst-leiste-status')
+  if (status) {
+    status.innerHTML = dirty
+      ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
+      : `<span class="einst-sauber">Alles gespeichert</span>`
+  }
+  const speichern = form.querySelector('[data-einst="speichern"]')
+  const reset = form.querySelector('[data-einst="zuruecksetzen"]')
+  if (speichern) speichern.disabled = !dirty || zustand.einstellungen.speichern
+  if (reset) reset.disabled = !dirty
+  const portHilfe = form.querySelector('[name="hubPort"]')?.closest('.einst-feld')?.querySelector('.einst-hilfe')
+  if (portHilfe) {
+    portHilfe.innerHTML = `Übersicht unter <span class="mono">http://devhub.localhost:${h(form.hubPort.value)}</span>`
+  }
+  const suffixHilfe = form.querySelector('[name="domainSuffix"]')?.closest('.einst-feld')?.querySelector('.einst-hilfe')
+  if (suffixHilfe) {
+    const suffix = h(String(form.domainSuffix.value || 'localhost').trim() || 'localhost')
+    suffixHilfe.innerHTML = `Projektadressen wie <span class="mono">name.${suffix}</span>`
+  }
+}
+
+async function speichereEinstellungen() {
+  const form = $('#einst-form')
+  if (!form || !zustand.einstellungen.draft) return
+  zustand.einstellungen.draft = einstellungenAusForm(form)
+  zustand.einstellungen.speichern = true
+  zustand.einstellungen.hinweis = ''
+  rendereEinstellungen()
   try {
-    const daten = await api('/api/hub-log?lines=150')
-    const text = daten.lines?.length ? daten.lines.join('\n') : 'Noch keine Einträge.'
-    zeigeProtokollDialog({
-      titel: 'Hub-Verlauf',
-      rohtext: text,
-      hinweisHtml: true,
-      hinweis: daten.file
-        ? `<span class="protokoll-datei-zeile"><span>Datei: <code title="${h(daten.file)}">${h(daten.file)}</code></span>${pfadAktionenHtml(daten.file, { kompakt: true })}</span>`
-        : ''
+    const draft = zustand.einstellungen.draft
+    const ergebnis = await api('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        roots: draft.roots,
+        hubPort: draft.hubPort,
+        domainSuffix: draft.domainSuffix,
+        editor: draft.editor,
+        showGlobalAgentContext: draft.showGlobalAgentContext,
+        readyTimeoutMs: draft.readyTimeoutMs
+      })
     })
+    zustand.einstellungen.geladen = einstellungenKlon(ergebnis.settings)
+    zustand.einstellungen.draft = einstellungenKlon(ergebnis.settings)
+    zustand.einstellungen.dirty = false
+    zustand.einstellungen.hinweis = ergebnis.warnings?.length
+      ? ergebnis.warnings.join(' ')
+      : 'Gespeichert'
+    zeigeOk(ergebnis.warnings?.length ? ergebnis.warnings[0] : 'Einstellungen gespeichert')
+    // Overview neu laden — Footer/Editor-Name können sich ändern.
+    await laden({ erzwingen: true })
   } catch (err) {
+    zustand.einstellungen.hinweis = err.message
     zeigeFehler(err.message)
+  } finally {
+    zustand.einstellungen.speichern = false
+    if (zustand.ansicht === 'einstellungen') rendereEinstellungen()
   }
 }
 
@@ -377,7 +656,8 @@ async function handle(knopf, arbeit) {
   try {
     const ergebnis = await arbeit()
     if (ergebnis?.warnings?.length) zeigeFehler(ergebnis.warnings.join(' · '))
-    await laden()
+    // Nach Aktion immer frisch holen — auch wenn gerade ein Poll läuft.
+    await laden({ erzwingen: true })
   } catch (err) {
     zeigeFehler(err.message)
   } finally {
@@ -427,15 +707,6 @@ const punktKlasse = (state) =>
 
 function anzeigeName(projekt) {
   return projekt.displayName || projekt.title || projekt.name
-}
-
-function passtZurSuche(projekt) {
-  if (!zustand.suche) return true
-  const q = zustand.suche
-  return (
-    projekt.name.toLowerCase().includes(q) ||
-    anzeigeName(projekt).toLowerCase().includes(q)
-  )
 }
 
 function githubHtml(projekt, { kurz = false } = {}) {
@@ -611,7 +882,7 @@ function ohneStartHtml(projekt) {
     : 'kein Start'
   const art = projekt.stack?.framework ?? projekt.stack?.kind
   // Kein Power-Knopf: hier lässt sich kein Slot vergeben — Name öffnet weiter Details.
-  return `<div class="zeile still" title="${h(hinweis)}">
+  return `<div class="zeile" title="${h(hinweis)}">
     <span class="punkt"></span>
     <span class="power" aria-hidden="true"></span>
     ${nameHtml(projekt, '', { title: art ? `${art} · ${hinweis}` : hinweis })}
@@ -621,18 +892,32 @@ function ohneStartHtml(projekt) {
   </div>`
 }
 
+function rendereKopfMeta() {
+  const stop = $('#alle-stoppen')
+  if (!stop) return
+  const laufen = zustand.daten?.summary?.running ?? 0
+  // Nur zeigen, wenn die Aktion Sinn hat — sonst nur Lärm im Kopf.
+  stop.hidden = laufen === 0
+  stop.disabled = laufen === 0
+  stop.title =
+    laufen === 0
+      ? 'Kein Server läuft'
+      : `${laufen} laufende${laufen === 1 ? 'n' : ''} Server stoppen`
+}
+
 function rendereFuss() {
   const fuss = $('#fuss')
   const daten = zustand.daten
   if (!fuss || !daten) return
 
-  $('#hub-adresse').textContent = location.host
+  rendereKopfMeta()
   const s = daten.summary
   const teil = (html, warn = false) =>
     `<span class="fuss-teil${warn ? ' warn' : ''}">${html}</span>`
   const sep = '<span class="fuss-sep" aria-hidden="true">·</span>'
 
   fuss.innerHTML = [
+    teil(`<span class="fuss-host" title="Hub-Adresse">${h(location.host)}</span>`),
     teil(`<b>${s.total}</b> Projekte`),
     teil(`<b>${s.adopted}</b> mit Slot`),
     teil(`<b>${s.running}</b> laufen`),
@@ -665,19 +950,16 @@ function listeGruppe(titel, zeilen) {
   </div>${zeilen.join('')}`
 }
 
-/** Getrennt von der Hauptliste: zugeklappt. Nicht startbare Projekte hängen unten an. */
+/** Getrennt von der Hauptliste: zugeklappt. Ohne Server unten als eigene Gruppe. */
 function kandidatenAufklappHtml(kandidaten, ohneStart = []) {
   if (!kandidaten.length && !ohneStart.length) return ''
 
   let offen = zustand.gruppenOffen['kein-port']
   if (offen === undefined) offen = false
-  if (zustand.suche) offen = true
 
   const n = kandidaten.length + ohneStart.length
   const zu =
     n === 1 ? '1 Projekt ohne Slot anzeigen' : `${n} Projekte ohne Slot anzeigen`
-
-  const stillTeil = ohneStart.length ? ohneStart.join('') : ''
 
   return `<details class="kandidaten" data-gruppe="kein-port"${offen ? ' open' : ''}>
     <summary>
@@ -688,7 +970,7 @@ function kandidatenAufklappHtml(kandidaten, ohneStart = []) {
     <div class="liste kandidaten-liste">
       ${listeKopfHtml()}
       ${kandidaten.join('')}
-      ${stillTeil}
+      ${listeGruppe('Ohne Server', ohneStart)}
     </div>
   </details>`
 }
@@ -706,8 +988,7 @@ function rendereUebersicht() {
   const ohneStart = []
 
   for (const projekt of daten.projects) {
-    if (!passtZurSuche(projekt)) continue
-    // Kein Startkommando: kein Slot möglich — in der aufklappbaren Liste, unten und ruhig.
+    // Kein Startkommando: in der aufklappbaren Liste unter „Ohne Server“.
     if (!projekt.profiles.length) {
       ohneStart.push(ohneStartHtml(projekt))
       continue
@@ -727,19 +1008,12 @@ function rendereUebersicht() {
 
   if (haupt.length) {
     $('#liste').innerHTML = listeKopfHtml() + haupt.join('')
-  } else if ((kandidaten.length || ohneStart.length) && !zustand.suche) {
+  } else if (kandidaten.length || ohneStart.length) {
     $('#liste').innerHTML =
       listeKopfHtml() +
       `<div class="liste-intro">
         <strong>Noch keine Projekte mit Slot</strong>
-        <p>Nimm ein Projekt auf, damit es hier mit festem Port erscheint. Kandidaten findest du darunter.</p>
-      </div>`
-  } else if ((kandidaten.length || ohneStart.length) && zustand.suche) {
-    $('#liste').innerHTML =
-      listeKopfHtml() +
-      `<div class="liste-intro">
-        <strong>Treffer ohne Slot</strong>
-        <p>Passende Projekte ohne Slot sind in der Liste darunter.</p>
+        <p>Nimm ein Projekt auf, damit es hier mit festem Port erscheint. Kandidaten findest du darunter — oder öffne die Befehlspalette mit ⌘K.</p>
       </div>`
   } else {
     $('#liste').innerHTML = listeKopfHtml() + leerHtml()
@@ -751,11 +1025,7 @@ function rendereUebersicht() {
 }
 
 function leerHtml() {
-  const titel = 'Keine Projekte gefunden'
-  const text = zustand.suche
-    ? `Keine Treffer für „${zustand.suche}“. Suche anpassen.`
-    : 'Unter ~/Dev wurden keine Kandidaten gefunden.'
-  return `<div class="leer-box"><strong>${h(titel)}</strong><p>${h(text)}</p></div>`
+  return `<div class="leer-box"><strong>Keine Projekte gefunden</strong><p>Unter ~/Dev wurden keine Kandidaten gefunden.</p></div>`
 }
 
 // ------------------------------------------------------------------ Detail
@@ -1188,10 +1458,222 @@ async function rendereLog({ ruhig = false } = {}) {
   }
 }
 
+// ------------------------------------------------------------------ Verlauf
+
+function hubLogTyp(text) {
+  const t = text.trim()
+  if (/^fehler\b/i.test(t) || /^error\b/i.test(t) || /^POST\s+\//i.test(t)) {
+    return { typ: 'fehler', label: 'Fehler' }
+  }
+  if (/^settings\b/i.test(t)) return { typ: 'settings', label: 'Config' }
+  if (/^forget\b/i.test(t)) return { typ: 'forget', label: 'Slot' }
+  if (/^unsync\b/i.test(t)) return { typ: 'unsync', label: 'Unsync' }
+  if (/^sync\b/i.test(t)) return { typ: 'sync', label: 'Sync' }
+  if (/^adopt\b/i.test(t)) return { typ: 'adopt', label: 'Slot' }
+  if (/beendet sich|Übersicht auf|startet|geladen/i.test(t)) return { typ: 'hub', label: 'Hub' }
+  if (/✓/.test(t)) return { typ: 'ok', label: 'OK' }
+  if (/!\s|warnung/i.test(t)) return { typ: 'warnung', label: 'Hinweis' }
+  return { typ: 'info', label: 'Info' }
+}
+
+function hubLogProjekt(text) {
+  const m = text.trim().match(/^(?:sync|unsync|forget|adopt)\s+(\S+)/i)
+  return m?.[1] ?? null
+}
+
+function hubLogIstKopf(text) {
+  return /^(sync|unsync|forget|adopt|settings)\b/i.test(text)
+    || /^(fehler:|error:|POST\s+\/)/i.test(text)
+    || /beendet sich|Übersicht auf/i.test(text)
+}
+
+function hubLogIstRauschen(text) {
+  return /^(gleich\s|unverändert\b)/i.test(text)
+}
+
+function hubLogDetailAnhaengen(eintrag, text) {
+  if (!text || hubLogIstRauschen(text)) return
+  eintrag.details.push(text)
+}
+
+/** Rohzeilen → Ereignisse (neueste zuerst). Sync-Blöcke und Wiederholungen werden verdichtet. */
+function parseHubLog(lines) {
+  const roh = []
+  let aktuell = null
+
+  const neuerEintrag = (zeit, text) => {
+    const { typ, label } = hubLogTyp(text)
+    aktuell = {
+      zeit,
+      text,
+      typ,
+      label,
+      projekt: hubLogProjekt(text),
+      details: [],
+      anzahl: 1
+    }
+    roh.push(aktuell)
+  }
+
+  for (const line of lines ?? []) {
+    const m = line.match(/^(\d{2}:\d{2}:\d{2})\s+devhub\s+(.*)$/)
+    const zeit = m?.[1] ?? ''
+    const text = (m ? m[2] : line).trim()
+    if (!text) continue
+
+    if (!m && !/^fehler:/i.test(line)) {
+      if (aktuell) hubLogDetailAnhaengen(aktuell, text)
+      continue
+    }
+
+    // „sync foo — 4 Dateien geändert“ schließt den offenen Sync-Block ab.
+    const summary = text.match(/^(sync|unsync|forget|adopt)\s+(\S+)\s+—\s+(.+)/i)
+    if (summary && aktuell) {
+      const prev = aktuell.text.match(/^(sync|unsync|forget|adopt)\s+(\S+)/i)
+      if (
+        prev &&
+        prev[1].toLowerCase() === summary[1].toLowerCase() &&
+        prev[2] === summary[2]
+      ) {
+        aktuell.text = text
+        const { typ, label } = hubLogTyp(text)
+        aktuell.typ = typ
+        aktuell.label = label
+        continue
+      }
+    }
+
+    if (/^\s+/.test(m?.[2] ?? '') && aktuell) {
+      hubLogDetailAnhaengen(aktuell, text)
+      continue
+    }
+
+    if (hubLogIstKopf(text) || !aktuell) {
+      neuerEintrag(zeit, text)
+      continue
+    }
+
+    // Zwischenzeilen eines Sync/Forget gehören zum offenen Ereignis.
+    hubLogDetailAnhaengen(aktuell, text)
+  }
+
+  // Identische aufeinanderfolgende Einträge (z. B. Port-Fehler) zusammenziehen.
+  const kompakt = []
+  for (const e of roh) {
+    const prev = kompakt[kompakt.length - 1]
+    if (
+      prev &&
+      prev.text === e.text &&
+      prev.typ === e.typ &&
+      prev.details.length === 0 &&
+      e.details.length === 0
+    ) {
+      prev.anzahl += 1
+      if (e.zeit) prev.zeit = e.zeit
+      continue
+    }
+    kompakt.push({ ...e, details: [...e.details] })
+  }
+  return kompakt.reverse()
+}
+
+function verlaufTitel(eintrag) {
+  const t = eintrag.text
+  let m
+  if ((m = t.match(/^(?:sync|forget|adopt|settings)\s+\S+\s+—\s+(.+)/i))) return m[1]
+  if (/^unsync\s+\S+$/i.test(t)) return 'Lokale Hub-Dateien entfernt'
+  if (/^sync\s+\S+$/i.test(t)) return 'Agent-Dateien synchronisiert'
+  if (/beendet sich/.test(t)) return 'Hub beendet — Dev-Server laufen weiter'
+  if ((m = t.match(/^Übersicht auf\s+(.+)/i))) return `Hub gestartet · ${m[1]}`
+  return t
+}
+
+function verlaufEintragHtml(eintrag) {
+  const projekt = eintrag.projekt
+    ? zustand.daten?.projects?.find((p) => p.name === eintrag.projekt)
+    : null
+  const projektLabel = projekt ? anzeigeName(projekt) : eintrag.projekt
+  const details = eintrag.details.length
+    ? `<ul class="verlauf-details">${eintrag.details.map((d) => `<li>${h(d)}</li>`).join('')}</ul>`
+    : ''
+  const projektHtml = eintrag.projekt
+    ? `<button type="button" class="verlauf-projekt" data-aktion="detail" data-projekt="${h(eintrag.projekt)}" title="Details öffnen">${h(projektLabel)}</button>`
+    : ''
+
+  return `<article class="verlauf-eintrag" data-typ="${h(eintrag.typ)}">
+    <div class="verlauf-zeit">${eintrag.zeit ? h(eintrag.zeit) : '—'}</div>
+    <div class="verlauf-spur" aria-hidden="true"><span class="verlauf-punkt"></span></div>
+    <div class="verlauf-koerper">
+      <div class="verlauf-kopf-zeile">
+        <span class="verlauf-badge">${h(eintrag.label)}</span>
+        ${projektHtml}
+        ${eintrag.anzahl > 1 ? `<span class="verlauf-anzahl">×${eintrag.anzahl}</span>` : ''}
+      </div>
+      <p class="verlauf-text">${h(verlaufTitel(eintrag))}</p>
+      ${details}
+    </div>
+  </article>`
+}
+
+async function rendereVerlauf({ ruhig = false } = {}) {
+  const ziel = $('#verlauf')
+  if (!ziel) return
+
+  try {
+    const daten = await api('/api/hub-log?lines=250')
+    const eintraege = parseHubLog(daten.lines ?? [])
+    const signatur = [
+      daten.file ?? '',
+      daten.lines?.length ?? 0,
+      daten.lines?.[0] ?? '',
+      daten.lines?.at?.(-1) ?? ''
+    ].join('\0')
+
+    if (ruhig && signatur === zustand.verlauf.signatur && ziel.querySelector('.verlauf-liste')) {
+      return
+    }
+
+    zustand.verlauf = { datei: daten.file ?? null, eintraege, signatur }
+
+    const meta = daten.file
+      ? `<span class="verlauf-datei">
+          <span class="meta" title="${h(daten.file)}">${h(daten.file)}</span>
+          ${pfadAktionenHtml(daten.file, { kompakt: true })}
+        </span>`
+      : ''
+
+    const liste = eintraege.length
+      ? `<div class="verlauf-liste">${eintraege.map(verlaufEintragHtml).join('')}</div>`
+      : `<div class="leer-box">
+          <strong>Noch keine Einträge</strong>
+          <p>Sync, Slot-Vergabe und ähnliche Aktionen erscheinen hier automatisch.</p>
+        </div>`
+
+    ziel.innerHTML = `
+      <header class="verlauf-hero">
+        <div class="verlauf-hero-text">
+          <h2>Verlauf</h2>
+          <p class="verlauf-untertitel">Hub-Aktionen und Meldungen</p>
+        </div>
+        <div class="verlauf-hero-meta">
+          ${eintraege.length ? `<span class="verlauf-count">${eintraege.length} Einträge</span>` : ''}
+          ${meta}
+        </div>
+      </header>
+      ${liste}`
+  } catch (err) {
+    if (!ruhig) {
+      ziel.innerHTML = `<div class="leer-box"><strong>Verlauf nicht lesbar</strong><p>${h(err.message)}</p></div>`
+    }
+  }
+}
+
 // ------------------------------------------------------------------ Routing
 
 function routeAusUrl() {
   const teile = location.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  if (teile[0] === 'verlauf' && !teile[1]) return { ansicht: 'verlauf', projekt: null }
+  if (teile[0] === 'einstellungen' && !teile[1]) return { ansicht: 'einstellungen', projekt: null }
   if (teile[0] === 'projekt' && teile[1]) {
     const projekt = teile[1]
     const params = new URLSearchParams(location.search)
@@ -1211,6 +1693,8 @@ function routeAusUrl() {
 }
 
 function urlFuer({ ansicht = zustand.ansicht, projekt = zustand.projekt, log = zustand.log } = {}) {
+  if (ansicht === 'verlauf') return '/verlauf'
+  if (ansicht === 'einstellungen') return '/einstellungen'
   if (ansicht === 'log' && projekt) {
     const q = new URLSearchParams()
     if (log.profil && log.profil !== 'default') q.set('profil', log.profil)
@@ -1225,7 +1709,9 @@ function urlFuer({ ansicht = zustand.ansicht, projekt = zustand.projekt, log = z
 function setzeTitel() {
   const projekt = zustand.daten?.projects.find((p) => p.name === zustand.projekt)
   const name = projekt ? anzeigeName(projekt) : zustand.projekt
-  if (zustand.ansicht === 'log' && name) document.title = `Log · ${name} · devhub`
+  if (zustand.ansicht === 'verlauf') document.title = 'Verlauf · devhub'
+  else if (zustand.ansicht === 'einstellungen') document.title = 'Einstellungen · devhub'
+  else if (zustand.ansicht === 'log' && name) document.title = `Log · ${name} · devhub`
   else if (zustand.ansicht === 'detail' && name) document.title = `${name} · devhub`
   else document.title = 'devhub'
 }
@@ -1242,7 +1728,13 @@ function rendereKrume() {
   const nav = $('#krume')
   if (!nav) return
 
-  if (zustand.ansicht === 'uebersicht' || !zustand.projekt) {
+  // Hauptnav deckt Hub-Seiten ab — Krume nur für Projekthierarchie.
+  if (
+    zustand.ansicht === 'uebersicht' ||
+    zustand.ansicht === 'verlauf' ||
+    zustand.ansicht === 'einstellungen' ||
+    !zustand.projekt
+  ) {
     nav.hidden = true
     nav.innerHTML = ''
     return
@@ -1264,13 +1756,32 @@ function rendereKrume() {
   nav.hidden = false
 }
 
+function setzeNavAktiv() {
+  // Detail/Log gehören zur Übersicht — Verlauf/Einstellungen sind eigene Sektionen.
+  let aktivNav = 'uebersicht'
+  if (zustand.ansicht === 'verlauf') aktivNav = 'verlauf'
+  else if (zustand.ansicht === 'einstellungen') aktivNav = 'einstellungen'
+  for (const el of document.querySelectorAll('.kopf-nav [data-nav]')) {
+    const aktiv = el.dataset.nav === aktivNav
+    el.classList.toggle('aktiv', aktiv)
+    if (aktiv) el.setAttribute('aria-current', 'page')
+    else el.removeAttribute('aria-current')
+  }
+}
+
 function setzeAnsicht(ansicht) {
   zustand.ansicht = ansicht
-  for (const id of ['uebersicht', 'detail', 'log']) $(`#${id}`).hidden = id !== ansicht
+  for (const id of ['uebersicht', 'detail', 'log', 'verlauf', 'einstellungen']) {
+    const el = $(`#${id}`)
+    if (el) el.hidden = id !== ansicht
+  }
   if (ansicht === 'detail') rendereDetail()
   if (ansicht === 'log') rendereLog()
   if (ansicht === 'uebersicht') rendereUebersicht()
+  if (ansicht === 'verlauf') rendereVerlauf()
+  if (ansicht === 'einstellungen') rendereEinstellungen()
   rendereKrume()
+  setzeNavAktiv()
   setzeTitel()
   scrollTo({ top: 0 })
 }
@@ -1292,7 +1803,35 @@ async function wendeRouteAn() {
 
   if (route.ansicht === 'uebersicht') {
     schliesseDateiVorschau()
+    zustand.projekt = null
     setzeAnsicht('uebersicht')
+    return
+  }
+
+  if (route.ansicht === 'verlauf') {
+    schliesseDateiVorschau()
+    zustand.projekt = null
+    setzeAnsicht('verlauf')
+    return
+  }
+
+  if (route.ansicht === 'einstellungen') {
+    schliesseDateiVorschau()
+    zustand.projekt = null
+    setzeAnsicht('einstellungen')
+    try {
+      await ladeEinstellungen({ erzwingen: !zustand.einstellungen.dirty })
+      rendereEinstellungen()
+    } catch (err) {
+      zeigeFehler(err.message)
+      const ziel = $('#einstellungen')
+      if (ziel) {
+        ziel.innerHTML = `<div class="leer">
+          <h2>Einstellungen</h2>
+          <p>Konnte nicht geladen werden: ${h(err.message)}</p>
+        </div>`
+      }
+    }
     return
   }
 
@@ -1431,8 +1970,13 @@ function aktualisiereDetailMetas(daten) {
   }
 }
 
-async function laden({ ohneRoute = false, ruhig = false } = {}) {
-  if (zustand.ladenLaufend) return
+async function laden({ ohneRoute = false, ruhig = false, erzwingen = false } = {}) {
+  // Poll und Aktion überlappen oft: der laufende Fetch hat noch den alten Stand.
+  // Statt zu verwerfen, nach dem aktuellen Lauf noch einmal holen.
+  if (zustand.ladenLaufend) {
+    if (erzwingen || !ruhig) zustand.ladenErneut = { ohneRoute: false, ruhig: false }
+    return
+  }
   zustand.ladenLaufend = true
   try {
     const daten = await api('/api/overview?memory=1')
@@ -1440,10 +1984,11 @@ async function laden({ ohneRoute = false, ruhig = false } = {}) {
 
     const listeNeu = listenSignaturVon(daten)
     const fussNeu = fussSignaturVon(daten)
-    const listeGleich = ruhig && listeNeu === zustand.listenSignatur
+    // Erzwungene Aktualisierung nach Aktion: Signatur-Kurzschluss überspringen.
+    const listeGleich = !erzwingen && ruhig && listeNeu === zustand.listenSignatur
     const fussGleich = ruhig && fussNeu === zustand.fussSignatur
 
-    if (!fussGleich) {
+    if (!fussGleich || erzwingen) {
       rendereFuss()
       zustand.fussSignatur = fussNeu
     }
@@ -1478,6 +2023,11 @@ async function laden({ ohneRoute = false, ruhig = false } = {}) {
     if (!ruhig) zeigeFehler(`Hub antwortet nicht: ${err.message}`)
   } finally {
     zustand.ladenLaufend = false
+    const erneut = zustand.ladenErneut
+    if (erneut) {
+      zustand.ladenErneut = null
+      await laden({ ...erneut, erzwingen: true })
+    }
   }
 }
 
@@ -1494,6 +2044,7 @@ function startePolling() {
   zustand.pollTimer = setInterval(() => {
     if (document.hidden) return
     if (zustand.ansicht === 'log') rendereLog({ ruhig: true })
+    else if (zustand.ansicht === 'verlauf') rendereVerlauf({ ruhig: true })
     else laden({ ruhig: true })
   }, 5000)
 }
@@ -1501,42 +2052,734 @@ function startePolling() {
 async function pollSofort() {
   if (document.hidden) return
   if (zustand.ansicht === 'log') await rendereLog({ ruhig: true })
+  else if (zustand.ansicht === 'verlauf') await rendereVerlauf({ ruhig: true })
   else await laden({ ruhig: true })
 }
 
-// ------------------------------------------------------------------ Ereignisse
+// ------------------------------------------------------------------ Befehlspalette
+// Zwei Ebenen: Navigation + Projekte → Projektaktionen.
+// Power-User: „suntino starten“ auf Ebene 1 trifft die Aktion direkt.
 
-document.addEventListener('click', async (ereignis) => {
-  for (const offen of document.querySelectorAll('details.menu[open]')) {
-    if (!offen.contains(ereignis.target)) offen.open = false
+function befehlDialog() {
+  return $('#befehl')
+}
+
+function befehlOffen() {
+  return Boolean(befehlDialog()?.open)
+}
+
+function profilLaeuft(profil) {
+  return profil?.state === 'läuft' || profil?.state === 'teilweise'
+}
+
+function tokenScore(teile, q) {
+  let best = 0
+  for (const roh of teile) {
+    if (!roh) continue
+    const t = String(roh).toLowerCase()
+    if (t === q) best = Math.max(best, 100)
+    else if (t.startsWith(q)) best = Math.max(best, 80)
+    else if (t.includes(q)) best = Math.max(best, 55)
+    else {
+      // Anfangsbuchstaben: „mt“ trifft „MapTale“
+      const initials = t
+        .split(/[^a-z0-9äöüß]+/i)
+        .filter(Boolean)
+        .map((w) => w[0])
+        .join('')
+      if (initials.startsWith(q)) best = Math.max(best, 40)
+    }
+  }
+  return best
+}
+
+/** Mehrere Wörter: jedes Token muss irgendwo treffen („starten suntino“). */
+function befehlScore(teile, query) {
+  if (!query) return 1
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!tokens.length) return 1
+  let summe = 0
+  for (const q of tokens) {
+    const score = tokenScore(teile, q)
+    if (score <= 0) return 0
+    summe += score
+  }
+  return summe / tokens.length
+}
+
+function befehlSuchfelder(b) {
+  return [b.label, b.hint, b.meta, b.gruppe, ...(b.keywords ?? [])]
+}
+
+/** Kleinere Zahl = weiter oben, wenn die Suchpunktzahl gleich ist. */
+function befehlPrioritaet(b) {
+  const id = b.id
+  if (id === 'nav:zurueck') return 0
+  if (id.startsWith('nav:')) return 1
+  if (b.art === 'projekt') return 2
+  if (id.includes(':stopp:')) return 3
+  if (id.includes(':start:')) return 4
+  if (id.endsWith(':aufnehmen')) return 5
+  if (id.endsWith(':detail')) return 6
+  if (id.includes(':log:') || id.includes(':browser:')) return 7
+  if (id.includes(':neu:')) return 8
+  if (id.endsWith(':finder') || id.endsWith(':editor') || id.endsWith(':github')) return 9
+  if (id.endsWith(':sync') || id.endsWith(':anzeigename')) return 10
+  if (id.endsWith(':vergessen')) return 11
+  return 12
+}
+
+function befehlEintrag(teil) {
+  return {
+    id: teil.id,
+    label: teil.label,
+    hint: teil.hint ?? '',
+    meta: teil.meta ?? '',
+    gruppe: teil.gruppe ?? 'Befehle',
+    punkt: teil.punkt ?? 'punkt',
+    gefahr: Boolean(teil.gefahr),
+    keywords: teil.keywords ?? [],
+    art: teil.art ?? 'aktion',
+    projekt: teil.projekt ?? null,
+    ausfuehren: teil.ausfuehren
+  }
+}
+
+function projektMeta(projekt) {
+  const titel = anzeigeName(projekt)
+  const ordner = projekt.name
+  const art = projekt.stack?.framework ?? projekt.stack?.kind ?? ''
+  const haupt = projekt.profiles[0]
+  const laeuft = projekt.profiles.some(profilLaeuft)
+  const punkt = haupt
+    ? laeuft
+      ? punktKlasse(projekt.profiles.find(profilLaeuft)?.state ?? haupt.state)
+      : 'punkt'
+    : 'punkt'
+  const zustandHint = !projekt.profiles.length
+    ? 'kein Server'
+    : !projekt.adopted
+      ? 'kein Slot'
+      : laeuft
+        ? 'läuft'
+        : 'gestoppt'
+  return {
+    titel,
+    ordner,
+    art,
+    punkt,
+    zustandHint,
+    basis: [titel, ordner, art, zustandHint],
+    gruppe: titel === ordner ? titel : `${titel} · ${ordner}`
+  }
+}
+
+function findeProjekt(name) {
+  return (zustand.daten?.projects ?? []).find((p) => p.name === name) ?? null
+}
+
+/** Kontextuelles „Zurück“ — erste Nav-Zeile, wenn es eine sinnvolle Oberansicht gibt. */
+function baueZurueckBefehl() {
+  if (zustand.ansicht === 'log' && zustand.projekt) {
+    const projekt = findeProjekt(zustand.projekt)
+    const titel = projekt ? anzeigeName(projekt) : zustand.projekt
+    return befehlEintrag({
+      id: 'nav:zurueck',
+      label: 'Zurück',
+      hint: titel,
+      meta: '←',
+      gruppe: 'Navigation',
+      keywords: ['zurück', 'back', 'prev'],
+      ausfuehren: () => oeffneDetail(zustand.projekt)
+    })
+  }
+  if (zustand.ansicht === 'detail' && zustand.projekt) {
+    return befehlEintrag({
+      id: 'nav:zurueck',
+      label: 'Zurück',
+      hint: 'Übersicht',
+      meta: '←',
+      gruppe: 'Navigation',
+      keywords: ['zurück', 'back', 'prev', 'übersicht'],
+      ausfuehren: () => geheZu('/')
+    })
+  }
+  if (zustand.ansicht === 'verlauf' || zustand.ansicht === 'einstellungen') {
+    return befehlEintrag({
+      id: 'nav:zurueck',
+      label: 'Zurück',
+      hint: 'Übersicht',
+      meta: '←',
+      gruppe: 'Navigation',
+      keywords: ['zurück', 'back', 'prev', 'übersicht'],
+      ausfuehren: () => geheZu('/')
+    })
+  }
+  return null
+}
+
+function baueNavBefehle() {
+  const daten = zustand.daten
+  const liste = []
+  const zurueck = baueZurueckBefehl()
+  if (zurueck) liste.push(zurueck)
+
+  if (zustand.ansicht !== 'uebersicht') {
+    liste.push(
+      befehlEintrag({
+        id: 'nav:uebersicht',
+        label: 'Übersicht',
+        hint: 'Alle Projekte',
+        gruppe: 'Navigation',
+        keywords: ['übersicht', 'home', 'projekte', 'liste'],
+        ausfuehren: () => geheZu('/')
+      })
+    )
+  }
+  if (zustand.ansicht !== 'verlauf') {
+    liste.push(
+      befehlEintrag({
+        id: 'nav:verlauf',
+        label: 'Verlauf',
+        hint: 'Hub-Protokoll',
+        gruppe: 'Navigation',
+        keywords: ['verlauf', 'log', 'history', 'hub', 'protokoll'],
+        ausfuehren: () => oeffneVerlauf()
+      })
+    )
+  }
+  if (zustand.ansicht !== 'einstellungen') {
+    liste.push(
+      befehlEintrag({
+        id: 'nav:einstellungen',
+        label: 'Einstellungen',
+        hint: 'Hub-Konfiguration',
+        gruppe: 'Navigation',
+        keywords: ['einstellungen', 'settings', 'config', 'konfiguration', 'optionen'],
+        ausfuehren: () => oeffneEinstellungen()
+      })
+    )
+  }
+  liste.push(
+    befehlEintrag({
+      id: 'nav:alle-stoppen',
+      label: 'Alle Server stoppen',
+      hint: daten?.summary?.running ? `${daten.summary.running} laufen` : 'nichts läuft',
+      gruppe: 'Navigation',
+      keywords: ['alle', 'stoppen', 'down', 'kill'],
+      gefahr: true,
+      ausfuehren: () => aktionAusfuehren('alle-stoppen')
+    })
+  )
+  return liste
+}
+
+function baueProjektEintraege() {
+  return (zustand.daten?.projects ?? []).map((projekt) => {
+    const m = projektMeta(projekt)
+    return befehlEintrag({
+      id: `nav:projekt:${m.ordner}`,
+      label: m.titel,
+      hint: m.titel === m.ordner ? m.zustandHint : m.ordner,
+      meta: m.zustandHint,
+      gruppe: 'Projekte',
+      punkt: m.punkt,
+      art: 'projekt',
+      projekt: m.ordner,
+      keywords: [...m.basis, 'projekt', 'öffnen'],
+      // Drill-down — nicht schließen.
+      ausfuehren: () => oeffneBefehlProjekt(m.ordner)
+    })
+  })
+}
+
+/** Aktionen eines Projekts (Ebene 2, bzw. Direkttreffer auf Ebene 1). */
+function baueProjektAktionen(projekt) {
+  const m = projektMeta(projekt)
+  const liste = []
+  const push = (teil) => liste.push(befehlEintrag(teil))
+  const { titel, ordner, basis, gruppe, punkt } = m
+
+  push({
+    id: `projekt:${ordner}:detail`,
+    label: 'Details öffnen',
+    hint: gruppe,
+    meta: m.zustandHint,
+    gruppe: 'Aktionen',
+    punkt,
+    projekt: ordner,
+    keywords: [...basis, 'details', 'öffnen', 'ansehen'],
+    ausfuehren: () => aktionAusfuehren('detail', { projekt: ordner })
+  })
+
+  if (!projekt.adopted && projekt.profiles.length) {
+    push({
+      id: `projekt:${ordner}:aufnehmen`,
+      label: 'Slot vergeben',
+      hint: gruppe,
+      meta: 'aufnehmen',
+      gruppe: 'Aktionen',
+      punkt,
+      projekt: ordner,
+      keywords: [...basis, 'slot', 'aufnehmen', 'adopt', 'vergeben'],
+      ausfuehren: () => aktionAusfuehren('aufnehmen', { projekt: ordner })
+    })
   }
 
-  const routeLink = ereignis.target.closest('[data-route]')
-  if (routeLink && !ereignis.metaKey && !ereignis.ctrlKey && !ereignis.shiftKey && !ereignis.altKey) {
-    ereignis.preventDefault()
-    return geheZu(routeLink.getAttribute('data-route') || routeLink.getAttribute('href') || '/')
+  for (const profil of projekt.profiles) {
+    const profilSuffix = profil.profile === 'default' ? '' : ` · ${profil.profile}`
+    const profilKeys = [...basis, profil.profile]
+    if (!projekt.adopted) continue
+
+    if (profilLaeuft(profil)) {
+      push({
+        id: `projekt:${ordner}:stopp:${profil.profile}`,
+        label: `Stoppen${profilSuffix}`,
+        hint: gruppe,
+        meta: metaLaufend(profil) || 'läuft',
+        gruppe: 'Aktionen',
+        punkt: punktKlasse(profil.state),
+        projekt: ordner,
+        keywords: [...profilKeys, 'stoppen', 'down', 'halt'],
+        ausfuehren: () =>
+          aktionAusfuehren('stopp', { projekt: ordner, profil: profil.profile })
+      })
+      push({
+        id: `projekt:${ordner}:neu:${profil.profile}`,
+        label: `Neu starten${profilSuffix}`,
+        hint: gruppe,
+        meta: 'restart',
+        gruppe: 'Aktionen',
+        punkt: punktKlasse(profil.state),
+        projekt: ordner,
+        keywords: [...profilKeys, 'neu', 'restart', 'reload'],
+        ausfuehren: () => aktionAusfuehren('neu', { projekt: ordner, profil: profil.profile })
+      })
+      const adresse =
+        profil.processes.find((p) => p.role === 'frontend' && p.listening)?.url ??
+        profil.processes.find((p) => p.listening)?.url
+      if (adresse) {
+        push({
+          id: `projekt:${ordner}:browser:${profil.profile}`,
+          label: `Im Browser öffnen${profilSuffix}`,
+          hint: adresse.replace(/^https?:\/\//, ''),
+          meta: 'url',
+          gruppe: 'Aktionen',
+          punkt: punktKlasse(profil.state),
+          projekt: ordner,
+          keywords: [...profilKeys, 'browser', 'öffnen', 'url', adresse],
+          ausfuehren: () => {
+            window.open(adresse, '_blank', 'noopener')
+          }
+        })
+      }
+    } else {
+      push({
+        id: `projekt:${ordner}:start:${profil.profile}`,
+        label: `Starten${profilSuffix}`,
+        hint: gruppe,
+        meta: 'gestoppt',
+        gruppe: 'Aktionen',
+        punkt: 'punkt',
+        projekt: ordner,
+        keywords: [...profilKeys, 'starten', 'start', 'up'],
+        ausfuehren: () =>
+          aktionAusfuehren('start', { projekt: ordner, profil: profil.profile })
+      })
+    }
+    push({
+      id: `projekt:${ordner}:log:${profil.profile}`,
+      label: `Log anzeigen${profilSuffix}`,
+      hint: gruppe,
+      meta: 'log',
+      gruppe: 'Aktionen',
+      punkt: punktKlasse(profil.state),
+      projekt: ordner,
+      keywords: [...profilKeys, 'log', 'logs', 'ausgabe'],
+      ausfuehren: () =>
+        aktionAusfuehren('log', { projekt: ordner, profil: profil.profile })
+    })
   }
 
-  const ziel = ereignis.target.closest('[data-aktion]')
-  if (!ziel) return
+  push({
+    id: `projekt:${ordner}:finder`,
+    label: 'Im Finder zeigen',
+    hint: gruppe,
+    meta: 'finder',
+    gruppe: 'Aktionen',
+    punkt,
+    projekt: ordner,
+    keywords: [...basis, 'finder', 'ordner', 'zeigen'],
+    ausfuehren: () => aktionAusfuehren('finder', { projekt: ordner })
+  })
+  push({
+    id: `projekt:${ordner}:editor`,
+    label: `In ${editorAnzeigename()} öffnen`,
+    hint: gruppe,
+    meta: 'editor',
+    gruppe: 'Aktionen',
+    punkt,
+    projekt: ordner,
+    keywords: [...basis, 'editor', 'cursor', 'code', 'öffnen'],
+    ausfuehren: () => aktionAusfuehren('editor', { projekt: ordner })
+  })
+  if (projekt.github?.url) {
+    push({
+      id: `projekt:${ordner}:github`,
+      label: 'Auf GitHub öffnen',
+      hint: projekt.github.label || gruppe,
+      meta: 'github',
+      gruppe: 'Aktionen',
+      punkt,
+      projekt: ordner,
+      keywords: [...basis, 'github', 'repo'],
+      ausfuehren: () => window.open(projekt.github.url, '_blank', 'noopener')
+    })
+  }
+  push({
+    id: `projekt:${ordner}:anzeigename`,
+    label: 'Anzeigename ändern',
+    hint: gruppe,
+    meta: 'name',
+    gruppe: 'Aktionen',
+    punkt,
+    projekt: ordner,
+    keywords: [...basis, 'anzeigename', 'umbenennen', 'rename', 'titel'],
+    ausfuehren: () => aktionAusfuehren('anzeigename', { projekt: ordner })
+  })
+  if (projekt.adopted) {
+    push({
+      id: `projekt:${ordner}:sync`,
+      label: 'Agent-Dateien syncen',
+      hint: gruppe,
+      meta: 'sync',
+      gruppe: 'Aktionen',
+      punkt,
+      projekt: ordner,
+      keywords: [...basis, 'sync', 'agent', 'dateien'],
+      ausfuehren: () => aktionAusfuehren('sync-projekt', { projekt: ordner })
+    })
+    push({
+      id: `projekt:${ordner}:vergessen`,
+      label: 'Slot entfernen…',
+      hint: gruppe,
+      meta: projekt.slot != null ? `Slot ${projekt.slot}` : 'slot',
+      gruppe: 'Aktionen',
+      punkt,
+      projekt: ordner,
+      gefahr: true,
+      keywords: [...basis, 'vergessen', 'entfernen', 'forget', 'slot'],
+      ausfuehren: () => aktionAusfuehren('vergessen', { projekt: ordner })
+    })
+  }
 
-  const menu = ziel.closest('details.menu')
-  if (menu && ziel.dataset.aktion) menu.open = false
+  return liste
+}
 
-  const { aktion, projekt, profil, prozess, pfad, ziel: oeffnenZiel } = ziel.dataset
-  const koerper = (extra = {}) => ({ method: 'POST', body: JSON.stringify({ profile: profil ?? 'default', ...extra }) })
+function baueAlleProjektAktionen() {
+  return (zustand.daten?.projects ?? []).flatMap((projekt) => {
+    // Auf Ebene 1: Projektname steht im Hint, Gruppe bleibt flach „Aktionen“.
+    return baueProjektAktionen(projekt).map((b) => ({
+      ...b,
+      gruppe: 'Aktionen',
+      hint: b.hint || anzeigeName(projekt)
+    }))
+  })
+}
+
+function sortiereBefehle(liste) {
+  return [...liste].sort(
+    (a, b) =>
+      befehlPrioritaet(a) - befehlPrioritaet(b) ||
+      a.label.localeCompare(b.label, 'de') ||
+      a.hint.localeCompare(b.hint, 'de')
+  )
+}
+
+function filtereUndSortiere(kandidaten, query, limit) {
+  const q = query.trim()
+  if (!q) return sortiereBefehle(kandidaten).slice(0, limit)
+  return kandidaten
+    .map((b) => ({ b, score: befehlScore(befehlSuchfelder(b), q) }))
+    .filter((x) => x.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        befehlPrioritaet(a.b) - befehlPrioritaet(b.b) ||
+        a.b.label.localeCompare(b.b.label, 'de')
+    )
+    .slice(0, limit)
+    .map((x) => x.b)
+}
+
+/**
+ * Direkteingabe „projekt aktion“: Aktionstreffer nur, wenn mindestens ein Token
+ * den Projektnamen trifft und eines die Aktion — sonst wären reine Aktionswörter
+ * („starten“) zu laut und würden die Projektliste verdrängen.
+ */
+function filtereDirektAktionen(query, limit) {
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length < 2) return []
+
+  return baueAlleProjektAktionen()
+    .map((b) => {
+      const felder = befehlSuchfelder(b)
+      const score = befehlScore(felder, query)
+      if (score <= 0) return null
+      const projektFelder = [b.hint, b.projekt, ...(b.keywords ?? [])].filter(Boolean)
+      const aktionFelder = [b.label, b.meta, ...(b.keywords ?? [])]
+      const trifftProjekt = tokens.some((t) => tokenScore(projektFelder, t) >= 55)
+      const trifftAktion = tokens.some((t) => tokenScore(aktionFelder, t) >= 55)
+      if (!trifftProjekt || !trifftAktion) return null
+      return { b, score }
+    })
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        befehlPrioritaet(a.b) - befehlPrioritaet(b.b) ||
+        a.b.label.localeCompare(b.b.label, 'de')
+    )
+    .slice(0, limit)
+    .map((x) => x.b)
+}
+
+function filtereBefehle(query) {
+  const q = query.trim()
+
+  if (zustand.befehl.ebene === 'projekt' && zustand.befehl.projekt) {
+    const projekt = findeProjekt(zustand.befehl.projekt)
+    if (!projekt) return []
+    const gruppenLabel = projektMeta(projekt).gruppe
+    const aktionen = baueProjektAktionen(projekt).map((b) => ({
+      ...b,
+      // Name steckt schon im Kontext-Chip — nur abweichende Hints (z. B. URL) behalten.
+      hint: b.hint === gruppenLabel ? '' : b.hint
+    }))
+    return filtereUndSortiere(aktionen, q, 30)
+  }
+
+  const nav = baueNavBefehle()
+  const projekte = baueProjektEintraege()
+
+  if (!q) {
+    return [...nav, ...sortiereBefehle(projekte)]
+  }
+
+  const navTreffer = filtereUndSortiere(nav, q, 8)
+  const projektTreffer = filtereUndSortiere(projekte, q, 16)
+  const aktionTreffer = filtereDirektAktionen(q, 12)
+
+  // Projekte vor Aktionen, solange der Name noch unscharf ist — sonst Direkttreffer oben.
+  if (aktionTreffer.length && tokensKlarFuerAktion(q, projektTreffer)) {
+    return [...navTreffer, ...aktionTreffer, ...projektTreffer].slice(0, 28)
+  }
+  return [...navTreffer, ...projektTreffer, ...aktionTreffer].slice(0, 28)
+}
+
+/** „suntino star“ ist klar genug für Aktionen vor der Projektliste. */
+function tokensKlarFuerAktion(query, projektTreffer) {
+  const tokens = query.trim().split(/\s+/).filter(Boolean)
+  if (tokens.length < 2) return false
+  // Exakter/präfixer Projektmatch + weiteres Token → Aktionen priorisieren.
+  return projektTreffer.some((p) => {
+    const namen = [p.label, p.projekt].filter(Boolean).map((s) => String(s).toLowerCase())
+    return tokens.some((t) => namen.some((n) => n === t || n.startsWith(t)))
+  })
+}
+
+function markiereBefehl(index, { scroll = false } = {}) {
+  const liste = $('#befehl-liste')
+  if (!liste) return
+  zustand.befehl.index = index
+  for (const el of liste.querySelectorAll('[data-befehl-index]')) {
+    const i = Number(el.dataset.befehlIndex)
+    const selected = i === index
+    el.setAttribute('aria-selected', selected ? 'true' : 'false')
+    if (selected && scroll) el.scrollIntoView({ block: 'nearest' })
+  }
+  const aktiv = liste.querySelector(`[data-befehl-index="${index}"]`)
+  const eingabe = $('#befehl-eingabe')
+  if (eingabe && aktiv) eingabe.setAttribute('aria-activedescendant', aktiv.id)
+}
+
+function befehlKopfAktualisieren() {
+  const aufProjekt = zustand.befehl.ebene === 'projekt' && zustand.befehl.projekt
+  const projekt = aufProjekt ? findeProjekt(zustand.befehl.projekt) : null
+  const titel = projekt ? anzeigeName(projekt) : zustand.befehl.projekt
+
+  const zurueck = $('#befehl-zurueck')
+  const icon = $('#befehl-icon')
+  const kontext = $('#befehl-kontext')
+  const eingabe = $('#befehl-eingabe')
+  const fuss = $('#befehl-fuss')
+
+  if (zurueck) zurueck.hidden = !aufProjekt
+  if (icon) icon.hidden = aufProjekt
+  if (kontext) {
+    kontext.hidden = !aufProjekt
+    kontext.textContent = titel || ''
+    kontext.title = projekt?.name || titel || ''
+  }
+  if (eingabe) {
+    eingabe.placeholder = aufProjekt
+      ? 'Aktion …'
+      : 'Navigieren, Projekt — oder „projekt aktion“'
+  }
+  if (fuss) {
+    fuss.innerHTML = aufProjekt
+      ? `<span><kbd>↑</kbd><kbd>↓</kbd> wählen</span>
+         <span><kbd>↵</kbd> ausführen</span>
+         <span><kbd>⌫</kbd>/<kbd>esc</kbd> zurück</span>`
+      : `<span><kbd>↑</kbd><kbd>↓</kbd> wählen</span>
+         <span><kbd>↵</kbd> öffnen</span>
+         <span><kbd>esc</kbd> schließen</span>`
+  }
+}
+
+function rendereBefehlsliste() {
+  const liste = $('#befehl-liste')
+  if (!liste) return
+  befehlKopfAktualisieren()
+  const treffer = zustand.befehl.treffer
+  if (!treffer.length) {
+    liste.innerHTML = `<div class="befehl-leer">Keine Treffer${
+      zustand.befehl.query ? ` für „${h(zustand.befehl.query)}“` : ''
+    }.</div>`
+    return
+  }
+
+  let letzteGruppe = null
+  const teile = []
+  treffer.forEach((b, i) => {
+    if (b.gruppe !== letzteGruppe) {
+      letzteGruppe = b.gruppe
+      teile.push(`<div class="befehl-gruppe">${h(b.gruppe)}</div>`)
+    }
+    const selected = i === zustand.befehl.index
+    const drill = b.art === 'projekt'
+    teile.push(`<button type="button" class="befehl-eintrag${b.gefahr ? ' gefahr' : ''}${drill ? ' drill' : ''}" role="option" id="befehl-opt-${i}" data-befehl-index="${i}" aria-selected="${selected}">
+      <span class="${h(b.punkt)}" aria-hidden="true"></span>
+      <span class="befehl-eintrag-text">
+        <span class="befehl-eintrag-label">${h(b.label)}</span>
+        ${b.hint ? `<span class="befehl-eintrag-hint">${h(b.hint)}</span>` : ''}
+      </span>
+      ${
+        drill
+          ? `<span class="befehl-eintrag-meta befehl-drill" aria-hidden="true">›</span>`
+          : b.meta
+            ? `<span class="befehl-eintrag-meta">${h(b.meta)}</span>`
+            : ''
+      }
+    </button>`)
+  })
+  liste.innerHTML = teile.join('')
+  markiereBefehl(zustand.befehl.index, { scroll: true })
+}
+
+function aktualisiereBefehle() {
+  zustand.befehl.treffer = filtereBefehle(zustand.befehl.query)
+  if (zustand.befehl.index >= zustand.befehl.treffer.length) {
+    zustand.befehl.index = Math.max(0, zustand.befehl.treffer.length - 1)
+  }
+  rendereBefehlsliste()
+}
+
+function setzeBefehlEbene(ebene, projekt = null) {
+  zustand.befehl.ebene = ebene
+  zustand.befehl.projekt = projekt
+  zustand.befehl.query = ''
+  zustand.befehl.index = 0
+  const eingabe = $('#befehl-eingabe')
+  if (eingabe) eingabe.value = ''
+  aktualisiereBefehle()
+  requestAnimationFrame(() => {
+    eingabe?.focus()
+  })
+}
+
+function oeffneBefehlProjekt(name) {
+  if (!findeProjekt(name)) return
+  setzeBefehlEbene('projekt', name)
+}
+
+function befehlEineEbeneZurueck() {
+  if (zustand.befehl.ebene !== 'projekt') return false
+  setzeBefehlEbene('root')
+  return true
+}
+
+function oeffneBefehl() {
+  const dlg = befehlDialog()
+  if (!dlg) return
+  // Andere Modals schließen — die Palette braucht den Fokus allein.
+  for (const id of ['protokoll', 'datei', 'bestaetigung', 'eingabe']) {
+    const ander = $(`#${id}`)
+    if (ander?.open) {
+      if (id === 'bestaetigung' || id === 'eingabe') ander.returnValue = 'cancel'
+      ander.close()
+    }
+  }
+  zustand.befehl.ebene = 'root'
+  zustand.befehl.projekt = null
+  zustand.befehl.query = ''
+  zustand.befehl.index = 0
+  const eingabe = $('#befehl-eingabe')
+  if (eingabe) eingabe.value = ''
+  aktualisiereBefehle()
+  if (typeof dlg.showModal === 'function') dlg.showModal()
+  else dlg.setAttribute('open', '')
+  requestAnimationFrame(() => {
+    eingabe?.focus()
+    eingabe?.select()
+  })
+}
+
+function schliesseBefehl() {
+  const dlg = befehlDialog()
+  if (dlg?.open) dlg.close()
+  zustand.befehl.ebene = 'root'
+  zustand.befehl.projekt = null
+  zustand.befehl.query = ''
+  zustand.befehl.index = 0
+}
+
+async function fuehreBefehlAus(index = zustand.befehl.index) {
+  const befehl = zustand.befehl.treffer[index]
+  if (!befehl) return
+  // Drill-down bleibt in der Palette.
+  if (befehl.art === 'projekt' && befehl.projekt) {
+    oeffneBefehlProjekt(befehl.projekt)
+    return
+  }
+  schliesseBefehl()
+  try {
+    await befehl.ausfuehren()
+  } catch (err) {
+    zeigeFehler(err.message)
+  }
+}
+
+async function aktionAusfuehren(aktion, kontext = {}, knopf = null) {
+  const { projekt, profil, prozess, pfad, oeffnenZiel } = kontext
+  const koerper = (extra = {}) => ({
+    method: 'POST',
+    body: JSON.stringify({ profile: profil ?? 'default', ...extra })
+  })
 
   switch (aktion) {
+    case 'befehl':
+      return oeffneBefehl()
     case 'detail':
       return oeffneDetail(projekt)
     case 'start':
-      return handle(ziel, () => api(`/api/projects/${encodeURIComponent(projekt)}/up`, koerper()))
+      return handle(knopf, () => api(`/api/projects/${encodeURIComponent(projekt)}/up`, koerper()))
     case 'stopp':
-      return handle(ziel, () => api(`/api/projects/${encodeURIComponent(projekt)}/down`, koerper()))
+      return handle(knopf, () => api(`/api/projects/${encodeURIComponent(projekt)}/down`, koerper()))
     case 'neu':
-      return handle(ziel, () => api(`/api/projects/${encodeURIComponent(projekt)}/restart`, koerper()))
+      return handle(knopf, () => api(`/api/projects/${encodeURIComponent(projekt)}/restart`, koerper()))
     case 'aufnehmen':
-      return handle(ziel, async () => {
+      return handle(knopf, async () => {
         await api(`/api/projects/${encodeURIComponent(projekt)}/adopt`, { method: 'POST', body: '{}' })
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
         zeigeSyncBericht(ergebnis, { titel: `Slot vergeben · Agent-Dateien für ${projekt}` })
@@ -1555,7 +2798,7 @@ document.addEventListener('click', async (ereignis) => {
         okLabel: 'Speichern'
       })
       if (neu === null) return
-      return handle(ziel, () =>
+      return handle(knopf, () =>
         api(`/api/projects/${encodeURIComponent(projekt)}/display-name`, {
           method: 'POST',
           body: JSON.stringify({ displayName: neu.trim() })
@@ -1563,18 +2806,18 @@ document.addEventListener('click', async (ereignis) => {
       )
     }
     case 'alle-stoppen':
-      return handle(ziel, () => api('/api/down-all', { method: 'POST', body: '{}' }))
+      return handle(knopf, () => api('/api/down-all', { method: 'POST', body: '{}' }))
     case 'hub-log':
-      return zeigeHubLog()
+      return oeffneVerlauf()
     case 'sync-projekt':
-      return handle(ziel, async () => {
+      return handle(knopf, async () => {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
         zeigeSyncBericht(ergebnis, { titel: `Agent-Dateien · ${projekt}` })
       })
     case 'vergessen': {
       const wahl = await frageSlotEntfernen(projekt)
       if (!wahl.ok) return
-      return handle(ziel, async () => {
+      return handle(knopf, async () => {
         const ergebnis = await api(`/api/projects/${encodeURIComponent(projekt)}/forget`, {
           method: 'POST',
           body: JSON.stringify({ unsync: true, cleanDeps: wahl.cleanDeps })
@@ -1612,9 +2855,11 @@ document.addEventListener('click', async (ereignis) => {
     case 'editor':
       return handle(null, () => api('/api/open', { method: 'POST', body: JSON.stringify({ project: projekt }) }))
     case 'finder':
-      return handle(null, () => api('/api/open', { method: 'POST', body: JSON.stringify({ project: projekt, finder: true }) }))
+      return handle(null, () =>
+        api('/api/open', { method: 'POST', body: JSON.stringify({ project: projekt, finder: true }) })
+      )
     case 'pfad-oeffnen':
-      return handle(ziel, () => oeffnePfad(pfad, { finder: oeffnenZiel === 'finder' }))
+      return handle(knopf, () => oeffnePfad(pfad, { finder: oeffnenZiel === 'finder' }))
     case 'datei-schliessen':
       schliesseDateiVorschau()
       return
@@ -1622,12 +2867,14 @@ document.addEventListener('click', async (ereignis) => {
       return oeffneLog(projekt, { profil: profil ?? 'default', prozess: prozess ?? null })
     case 'log-prozess':
       zustand.log.prozess = prozess
-      await geheZu(urlFuer({ ansicht: 'log', projekt: zustand.projekt, log: zustand.log }), { ersetzen: true })
+      await geheZu(urlFuer({ ansicht: 'log', projekt: zustand.projekt, log: zustand.log }), {
+        ersetzen: true
+      })
       return
     case 'agent-datei':
       return ladeDateiVorschau(pfad)
     case 'verknuepfen':
-      return handle(ziel, async () => {
+      return handle(knopf, async () => {
         await api(`/api/projects/${encodeURIComponent(projekt)}/link`, { method: 'POST', body: '{}' })
         zustand.agentenProjekt = null
         await ladeAgenten(projekt)
@@ -1637,38 +2884,171 @@ document.addEventListener('click', async (ereignis) => {
       schliesseDateiVorschau()
       return
   }
+}
+
+// ------------------------------------------------------------------ Ereignisse
+
+document.addEventListener('click', async (ereignis) => {
+  for (const offen of document.querySelectorAll('details.menu[open]')) {
+    if (!offen.contains(ereignis.target)) offen.open = false
+  }
+
+  const routeLink = ereignis.target.closest('[data-route]')
+  if (routeLink && !ereignis.metaKey && !ereignis.ctrlKey && !ereignis.shiftKey && !ereignis.altKey) {
+    ereignis.preventDefault()
+    return geheZu(routeLink.getAttribute('data-route') || routeLink.getAttribute('href') || '/')
+  }
+
+  const befehlKnopf = ereignis.target.closest('[data-befehl-index]')
+  if (befehlKnopf && befehlOffen()) {
+    const index = Number(befehlKnopf.dataset.befehlIndex)
+    if (Number.isFinite(index)) return fuehreBefehlAus(index)
+  }
+
+  const einst = ereignis.target.closest('[data-einst]')
+  if (einst && $('#einstellungen')?.contains(einst)) {
+    const art = einst.dataset.einst
+    if (art === 'root-dazu') {
+      const input = $('#einst-root-input')
+      const roh = String(input?.value ?? '').trim()
+      if (!roh) {
+        input?.focus()
+        return
+      }
+      syncEinstellungenDraftAusForm()
+      const draft = zustand.einstellungen.draft
+      if (!draft.roots.includes(roh)) {
+        // Rohtext behalten — der Server expandiert ~/…
+        draft.roots = [...draft.roots, roh]
+      }
+      if (input) input.value = ''
+      zustand.einstellungen.hinweis = ''
+      rendereEinstellungen()
+      $('#einst-root-input')?.focus()
+      return
+    }
+    if (art === 'root-weg') {
+      const index = Number(einst.dataset.index)
+      syncEinstellungenDraftAusForm()
+      const draft = zustand.einstellungen.draft
+      if (Number.isFinite(index) && draft) {
+        draft.roots = draft.roots.filter((_, i) => i !== index)
+      }
+      zustand.einstellungen.hinweis = ''
+      rendereEinstellungen()
+      return
+    }
+    if (art === 'zuruecksetzen') {
+      if (!zustand.einstellungen.geladen) return
+      zustand.einstellungen.draft = einstellungenKlon(zustand.einstellungen.geladen)
+      zustand.einstellungen.dirty = false
+      zustand.einstellungen.hinweis = ''
+      rendereEinstellungen()
+      return
+    }
+    if (art === 'speichern') {
+      ereignis.preventDefault()
+      return speichereEinstellungen()
+    }
+  }
+
+  const ziel = ereignis.target.closest('[data-aktion]')
+  if (!ziel) return
+
+  const menu = ziel.closest('details.menu')
+  if (menu && ziel.dataset.aktion) menu.open = false
+
+  const { aktion, projekt, profil, prozess, pfad, ziel: oeffnenZiel } = ziel.dataset
+  return aktionAusfuehren(aktion, { projekt, profil, prozess, pfad, oeffnenZiel }, ziel)
+})
+
+document.addEventListener('submit', (ereignis) => {
+  if (ereignis.target?.id === 'einst-form') {
+    ereignis.preventDefault()
+    return speichereEinstellungen()
+  }
+})
+
+document.addEventListener('input', (ereignis) => {
+  if (ereignis.target.closest?.('#einst-form')) syncEinstellungenDraftAusForm()
 })
 
 document.addEventListener('change', (ereignis) => {
   if (ereignis.target.id === 'folgen') zustand.log.folgen = ereignis.target.checked
+  if (ereignis.target.closest?.('#einst-form')) syncEinstellungenDraftAusForm()
 })
 
-$('#suche').addEventListener('input', (ereignis) => {
-  zustand.suche = ereignis.target.value.trim().toLowerCase()
-  rendereUebersicht()
+$('#befehl-eingabe')?.addEventListener('input', (ereignis) => {
+  zustand.befehl.query = ereignis.target.value
+  zustand.befehl.index = 0
+  aktualisiereBefehle()
 })
 
 document.addEventListener('keydown', (ereignis) => {
+  if (ereignis.key === 'Enter' && ereignis.target?.id === 'einst-root-input') {
+    ereignis.preventDefault()
+    document.querySelector('[data-einst="root-dazu"]')?.click()
+    return
+  }
+
   const tippt =
     ereignis.target instanceof HTMLElement &&
     (ereignis.target.matches('input, textarea, select') || ereignis.target.isContentEditable)
 
-  if (ereignis.key === '/' && !tippt && !ereignis.metaKey && !ereignis.ctrlKey && !ereignis.altKey) {
-    if (dateiDialog()?.open || $('#protokoll')?.open) return
+  const meta = ereignis.metaKey || ereignis.ctrlKey
+  if (meta && !ereignis.altKey && !ereignis.shiftKey && ereignis.key.toLowerCase() === 'k') {
     ereignis.preventDefault()
-    $('#suche')?.focus()
+    if (befehlOffen()) schliesseBefehl()
+    else oeffneBefehl()
     return
   }
 
-  if (ereignis.key === 'Escape') {
-    const suche = $('#suche')
-    if (suche && document.activeElement === suche && suche.value) {
-      suche.value = ''
-      zustand.suche = ''
-      rendereUebersicht()
-    } else {
-      suche?.blur()
+  if (befehlOffen()) {
+    const n = zustand.befehl.treffer.length
+    const eingabe = $('#befehl-eingabe')
+    const queryLeer = !(eingabe?.value ?? zustand.befehl.query)
+
+    if (ereignis.key === 'ArrowDown') {
+      ereignis.preventDefault()
+      if (!n) return
+      markiereBefehl((zustand.befehl.index + 1) % n, { scroll: true })
+      return
     }
+    if (ereignis.key === 'ArrowUp') {
+      ereignis.preventDefault()
+      if (!n) return
+      markiereBefehl((zustand.befehl.index - 1 + n) % n, { scroll: true })
+      return
+    }
+    if (ereignis.key === 'Enter') {
+      ereignis.preventDefault()
+      return fuehreBefehlAus()
+    }
+    // Leere Ebene-2-Eingabe: Backspace/← geht eine Ebene hoch statt zu löschen.
+    if (
+      queryLeer &&
+      zustand.befehl.ebene === 'projekt' &&
+      (ereignis.key === 'Backspace' || ereignis.key === 'ArrowLeft')
+    ) {
+      ereignis.preventDefault()
+      befehlEineEbeneZurueck()
+      return
+    }
+    if (ereignis.key === 'Escape') {
+      ereignis.preventDefault()
+      if (befehlEineEbeneZurueck()) return
+      schliesseBefehl()
+      return
+    }
+    return
+  }
+
+  if (ereignis.key === '/' && !tippt && !ereignis.metaKey && !ereignis.ctrlKey && !ereignis.altKey) {
+    if (dateiDialog()?.open || $('#protokoll')?.open || $('#bestaetigung')?.open || $('#eingabe')?.open) {
+      return
+    }
+    ereignis.preventDefault()
+    oeffneBefehl()
   }
 })
 
@@ -1733,6 +3113,32 @@ if (eingabeDlg) {
       eingabeDlg.returnValue = 'cancel'
       eingabeDlg.close()
     }
+  })
+}
+
+const befehlDlg = befehlDialog()
+if (befehlDlg) {
+  befehlDlg.addEventListener('click', (ereignis) => {
+    if (ereignis.target === befehlDlg) {
+      schliesseBefehl()
+      return
+    }
+    if (ereignis.target.closest('#befehl-zurueck')) {
+      befehlEineEbeneZurueck()
+    }
+  })
+  befehlDlg.addEventListener('mousemove', (ereignis) => {
+    const eintrag = ereignis.target.closest('[data-befehl-index]')
+    if (!eintrag || !befehlDlg.contains(eintrag)) return
+    const index = Number(eintrag.dataset.befehlIndex)
+    if (!Number.isFinite(index) || index === zustand.befehl.index) return
+    markiereBefehl(index)
+  })
+  befehlDlg.addEventListener('close', () => {
+    zustand.befehl.ebene = 'root'
+    zustand.befehl.projekt = null
+    zustand.befehl.query = ''
+    zustand.befehl.index = 0
   })
 }
 

@@ -323,5 +323,36 @@ export const routes = [
     method: 'GET',
     pattern: /^\/api\/health$/,
     handler: async () => ({ ok: true, instance, time: new Date().toISOString() })
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/settings$/,
+    handler: async () => {
+      const registry = registryStore.load()
+      return registryStore.publicSettings(registry.settings)
+    }
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/settings$/,
+    handler: async (_req, _params, _query, body) => {
+      const registry = registryStore.load()
+      const { settings, warnings } = registryStore.applySettingsPatch(registry, body ?? {})
+      registryStore.save(registry)
+      recordEvent({
+        type: 'settings',
+        project: 'hub',
+        summary: 'Einstellungen gespeichert',
+        lines: [
+          `Wurzeln: ${settings.roots.join(', ')}`,
+          `Hub-Port ${settings.hubPort} · ${settings.domainSuffix}`,
+          `Editor ${settings.editor}`,
+          `Agent-Kontext global: ${settings.showGlobalAgentContext ? 'an' : 'aus'}`,
+          `Timeout ${Math.round(settings.readyTimeoutMs / 1000)}s`,
+          ...warnings
+        ]
+      })
+      return { settings, warnings }
+    }
   }
 ]

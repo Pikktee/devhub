@@ -467,3 +467,35 @@ test('--deps-loeschen wird als cleanDeps erkannt', () => {
   assert.equal(parseArgs(['forget', 'demo', '--deps-loeschen']).flags.cleanDeps, true)
   assert.equal(parseArgs(['forget', 'demo', '--clean-deps']).flags.cleanDeps, true)
 })
+
+test('Settings-Patch validiert und expandiert Wurzeln', () => {
+  const registry = {
+    settings: { ...registryStore.DEFAULT_SETTINGS },
+    projects: {},
+    displayNames: {},
+    retiredSlots: []
+  }
+  const { settings, warnings } = registryStore.applySettingsPatch(registry, {
+    roots: ['~/Dev', '~/Dev'],
+    hubPort: 4002,
+    domainSuffix: 'localhost',
+    editor: 'code',
+    showGlobalAgentContext: false,
+    readyTimeoutMs: 45000
+  })
+  assert.equal(settings.roots.length, 1)
+  assert.ok(settings.roots[0].endsWith('/Dev'))
+  assert.equal(settings.hubPort, 4002)
+  assert.equal(settings.editor, 'code')
+  assert.equal(settings.showGlobalAgentContext, false)
+  assert.equal(settings.readyTimeoutMs, 45000)
+  assert.ok(warnings.some((w) => /Port/i.test(w)))
+  assert.throws(
+    () => registryStore.applySettingsPatch(registry, { hubPort: 80 }),
+    /1024/
+  )
+  assert.throws(
+    () => registryStore.applySettingsPatch(registry, { roots: [] }),
+    /Wurzel/
+  )
+})

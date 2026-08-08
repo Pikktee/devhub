@@ -13,6 +13,103 @@ export const DEFAULT_SETTINGS = {
   readyTimeoutMs: 60000
 }
 
+/** `~/…` → Home, damit die UI und CLI dieselben Pfade meinen. */
+export function expandPath(value) {
+  const s = String(value ?? '').trim()
+  if (!s) return ''
+  if (s === '~') return homedir()
+  if (s.startsWith('~/')) return join(homedir(), s.slice(2))
+  return s
+}
+
+export function publicSettings(settings = {}) {
+  const merged = { ...DEFAULT_SETTINGS, ...settings }
+  return {
+    roots: [...(merged.roots ?? DEFAULT_SETTINGS.roots)],
+    hubPort: merged.hubPort,
+    domainSuffix: merged.domainSuffix,
+    editor: merged.editor ?? DEFAULT_SETTINGS.editor,
+    showGlobalAgentContext: Boolean(merged.showGlobalAgentContext),
+    readyTimeoutMs: merged.readyTimeoutMs ?? DEFAULT_SETTINGS.readyTimeoutMs,
+    registryFile
+  }
+}
+
+/**
+ * Wendet einen Settings-Patch an (ohne zu speichern).
+ * Unbekannte Schlüssel werden ignoriert — die Registry bleibt vorwärtskompatibel.
+ */
+export function applySettingsPatch(registry, patch = {}) {
+  if (!patch || typeof patch !== 'object') {
+    throw Object.assign(new Error('Ungültiger Settings-Körper'), { status: 400 })
+  }
+  const next = { ...registry.settings }
+  const warnings = []
+  const vorherPort = next.hubPort
+
+  if (patch.roots !== undefined) {
+    if (!Array.isArray(patch.roots)) {
+      throw Object.assign(new Error('roots muss eine Liste sein'), { status: 400 })
+    }
+    const roots = []
+    const gesehen = new Set()
+    for (const roh of patch.roots) {
+      const pfad = expandPath(roh)
+      if (!pfad) continue
+      if (gesehen.has(pfad)) continue
+      gesehen.add(pfad)
+      roots.push(pfad)
+    }
+    if (!roots.length) {
+      throw Object.assign(new Error('Mindestens ein Wurzelverzeichnis angeben'), { status: 400 })
+    }
+    next.roots = roots
+  }
+
+  if (patch.hubPort !== undefined) {
+    const port = Number(patch.hubPort)
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      throw Object.assign(new Error('Hub-Port muss zwischen 1024 und 65535 liegen'), { status: 400 })
+    }
+    next.hubPort = port
+  }
+
+  if (patch.domainSuffix !== undefined) {
+    const suffix = String(patch.domainSuffix).trim().toLowerCase()
+    if (!/^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$/.test(suffix)) {
+      throw Object.assign(new Error('Domain-Suffix ist ungültig (z. B. localhost)'), { status: 400 })
+    }
+    next.domainSuffix = suffix
+  }
+
+  if (patch.editor !== undefined) {
+    const editor = String(patch.editor).trim()
+    if (!editor || /[\0\n\r]/.test(editor)) {
+      throw Object.assign(new Error('Editor-Kommando fehlt oder ist ungültig'), { status: 400 })
+    }
+    next.editor = editor
+  }
+
+  if (patch.showGlobalAgentContext !== undefined) {
+    next.showGlobalAgentContext = Boolean(patch.showGlobalAgentContext)
+  }
+
+  if (patch.readyTimeoutMs !== undefined) {
+    const ms = Number(patch.readyTimeoutMs)
+    if (!Number.isFinite(ms) || ms < 5000 || ms > 600_000) {
+      throw Object.assign(new Error('Bereitschafts-Timeout: 5–600 Sekunden'), { status: 400 })
+    }
+    next.readyTimeoutMs = Math.round(ms)
+  }
+
+  if (next.hubPort !== vorherPort) {
+    warnings.push('Hub-Port geändert — danach Hub neu starten (`devhub service restart`).')
+  }
+
+  registry.settings = next
+  return { settings: publicSettings(next), warnings }
+}
+
 const EMPTY = { version: 1, settings: {}, projects: {}, displayNames: {}, retiredSlots: [] }
 
 function stripLegacyFavorite(entry) {

@@ -18,18 +18,27 @@
 
 <header class="kopf">
   <div class="kopf-zeile">
-    <div class="kopf-marke">
+    <div class="kopf-links">
       <a class="marke" href="/" data-route="/" title="Zur Übersicht">
         <img class="logo" src="/logo.svg" alt="" width="28" height="28">
-        <div class="marke-text">
-          <h1>devhub</h1>
-          <span class="adresse" id="hub-adresse">localhost</span>
-        </div>
+        <h1>devhub</h1>
       </a>
+      <nav class="kopf-nav" aria-label="Hauptnavigation">
+        <a href="/" data-route="/" data-nav="uebersicht">Übersicht</a>
+        <a href="/verlauf" data-route="/verlauf" data-nav="verlauf">Verlauf</a>
+        <a href="/einstellungen" data-route="/einstellungen" data-nav="einstellungen">Einstellungen</a>
+      </nav>
     </div>
-    <div class="kopf-aktionen">
-      <button class="knopf leise" data-aktion="hub-log" title="Hub-Log / Verlauf">Verlauf</button>
-      <button class="knopf gefahr" data-aktion="alle-stoppen" title="Alle laufenden Server stoppen">Alle stoppen</button>
+
+    <div class="kopf-rechts">
+      <button type="button" class="befehl-trigger" data-aktion="befehl" title="Befehlspalette (⌘K)" aria-haspopup="dialog" aria-controls="befehl">
+        <span class="befehl-trigger-icon" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="befehl-trigger-text">Befehl</span>
+        <kbd class="taste-hint" aria-hidden="true">⌘K</kbd>
+      </button>
+      <button type="button" class="knopf gefahr" data-aktion="alle-stoppen" id="alle-stoppen" hidden title="Alle laufenden Server stoppen">Alle stoppen</button>
     </div>
   </div>
 
@@ -38,15 +47,6 @@
 
 <div id="inhalt">
   <main id="uebersicht">
-    <div class="suche-zeile">
-      <label class="suche-feld">
-        <span class="suche-icon" aria-hidden="true">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </span>
-        <input class="suche" id="suche" type="search" placeholder="Projekt suchen …" autocomplete="off" spellcheck="false" aria-label="Projekt suchen">
-        <kbd class="suche-taste" aria-hidden="true">/</kbd>
-      </label>
-    </div>
     <div class="liste" id="liste"><div class="laden" aria-busy="true">lädt …</div></div>
     <div id="kandidaten"></div>
   </main>
@@ -54,6 +54,10 @@
   <main id="detail" hidden></main>
 
   <main id="log" hidden></main>
+
+  <main id="verlauf" hidden></main>
+
+  <main id="einstellungen" hidden></main>
 </div>
 
 </div>
@@ -118,6 +122,27 @@
       <button type="submit" class="knopf leise" value="cancel">Abbrechen</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="befehl" class="befehl" aria-labelledby="befehl-label">
+  <div class="befehl-feld">
+    <button type="button" class="befehl-zurueck" id="befehl-zurueck" hidden title="Eine Ebene zurück" aria-label="Zurück">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="befehl-icon" id="befehl-icon" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </span>
+    <span class="befehl-kontext" id="befehl-kontext" hidden></span>
+    <input id="befehl-eingabe" type="search" placeholder="Navigieren oder Projekt …" autocomplete="off" spellcheck="false" aria-labelledby="befehl-label" aria-controls="befehl-liste" aria-autocomplete="list" role="combobox" aria-expanded="true">
+    <span id="befehl-label" class="visuell-versteckt">Befehlspalette</span>
+    <kbd class="taste-hint" aria-hidden="true">esc</kbd>
+  </div>
+  <div class="befehl-liste" id="befehl-liste" role="listbox" aria-label="Befehle"></div>
+  <div class="befehl-fuss" id="befehl-fuss" aria-hidden="true">
+    <span><kbd>↑</kbd><kbd>↓</kbd> wählen</span>
+    <span><kbd>↵</kbd> öffnen</span>
+    <span><kbd>esc</kbd> schließen</span>
+  </div>
 </dialog>
 
 <script type="module" src="/app.js"></script>
