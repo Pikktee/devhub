@@ -23,6 +23,34 @@ const zustand = {
   einstellungen: { geladen: null, draft: null, dirty: false, speichern: false, hinweis: '' }
 }
 
+const THEME_KEY = 'devhub-theme'
+
+function themeAktuell() {
+  const attr = document.documentElement.dataset.theme
+  if (attr === 'light' || attr === 'dark') return attr
+  try {
+    const gespeichert = localStorage.getItem(THEME_KEY)
+    if (gespeichert === 'light' || gespeichert === 'dark') return gespeichert
+  } catch {
+    /* ignore */
+  }
+  return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+}
+
+function setzeTheme(theme) {
+  const wert = theme === 'light' ? 'light' : 'dark'
+  document.documentElement.dataset.theme = wert
+  try {
+    localStorage.setItem(THEME_KEY, wert)
+  } catch {
+    /* ignore */
+  }
+  const meta = document.querySelector('meta[name="color-scheme"]')
+  if (meta) meta.content = wert
+  const schalter = document.querySelector('#einst-form [data-einst="theme"]')
+  if (schalter instanceof HTMLInputElement) schalter.checked = wert === 'light'
+}
+
 // ------------------------------------------------------------------ Netz
 
 async function api(pfad, optionen = {}) {
@@ -387,6 +415,24 @@ function rendereEinstellungen() {
         <section class="einst-sektion">
           <div class="einst-sektion-kopf">
             <span class="einst-kicker">04</span>
+            <div>
+              <h3>Darstellung</h3>
+              <p>Hell- oder Dunkelmodus für die Oberfläche.</p>
+            </div>
+          </div>
+          <label class="einst-schalter">
+            <span class="einst-schalter-text">
+              <strong>Heller Modus</strong>
+              <span>Helle Oberfläche statt dunklem Standard.</span>
+            </span>
+            <input type="checkbox" name="hellmodus" data-einst="theme" ${themeAktuell() === 'light' ? 'checked' : ''}>
+            <span class="einst-schalter-ui" aria-hidden="true"></span>
+          </label>
+        </section>
+
+        <section class="einst-sektion">
+          <div class="einst-sektion-kopf">
+            <span class="einst-kicker">05</span>
             <div>
               <h3>Agenten</h3>
               <p>Kontext für Coding-Agenten in der Detailansicht.</p>
@@ -2260,6 +2306,18 @@ function baueNavBefehle() {
       })
     )
   }
+  const theme = themeAktuell()
+  liste.push(
+    befehlEintrag({
+      id: 'nav:theme',
+      label: theme === 'light' ? 'Dunkelmodus' : 'Hellmodus',
+      hint: theme === 'light' ? 'Dunkle Oberfläche' : 'Helle Oberfläche',
+      meta: theme === 'light' ? 'dark' : 'light',
+      gruppe: 'Navigation',
+      keywords: ['theme', 'dark', 'light', 'hell', 'dunkel', 'modus', 'darstellung', 'farbschema'],
+      ausfuehren: () => setzeTheme(theme === 'light' ? 'dark' : 'light')
+    })
+  )
   liste.push(
     befehlEintrag({
       id: 'nav:alle-stoppen',
@@ -2975,6 +3033,10 @@ document.addEventListener('input', (ereignis) => {
 
 document.addEventListener('change', (ereignis) => {
   if (ereignis.target.id === 'folgen') zustand.log.folgen = ereignis.target.checked
+  if (ereignis.target.matches?.('[data-einst="theme"]')) {
+    setzeTheme(ereignis.target.checked ? 'light' : 'dark')
+    return
+  }
   if (ereignis.target.closest?.('#einst-form')) syncEinstellungenDraftAusForm()
 })
 

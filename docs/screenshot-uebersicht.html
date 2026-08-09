@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>devhub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../ui/style.css">
+<style>
+  /* Screenshot: fester Viewport, kein Scroll-Rauschen */
+  html, body { overflow: hidden; }
+  body { min-height: 820px; }
+</style>
+</head>
+<body>
+<div class="rahmen">
+
+<header class="kopf">
+  <div class="kopf-zeile">
+    <div class="kopf-links">
+      <a class="marke" href="#" title="Zur Übersicht">
+        <img class="logo" src="../ui/logo.svg" alt="" width="28" height="28">
+        <h1>devhub</h1>
+      </a>
+      <nav class="kopf-nav" aria-label="Hauptnavigation">
+        <a href="#" class="aktiv" aria-current="page">Übersicht</a>
+        <a href="#">Verlauf</a>
+        <a href="#">Einstellungen</a>
+      </nav>
+    </div>
+    <div class="kopf-rechts">
+      <button type="button" class="befehl-trigger" title="Befehlspalette (⌘K)">
+        <span class="befehl-trigger-icon" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M11.2 11.2 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="befehl-trigger-text">Befehl</span>
+        <kbd class="taste-hint" aria-hidden="true">⌘K</kbd>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div id="inhalt">
+  <main id="uebersicht">
+    <div class="liste" id="liste">
+      <div class="liste-kopf" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span>Projekt</span>
+        <span>Adresse</span>
+        <span>Zustand</span>
+        <span></span>
+      </div>
+
+      <div class="gruppe">
+        <span class="gruppe-titel">Läuft</span>
+        <span class="gruppe-meta"><span class="anzahl">2</span></span>
+      </div>
+
+      <div class="zeile" data-projekt="nordlicht">
+        <span class="punkt laeuft"></span>
+        <span class="power"><button type="button" class="knopf symbol stopp" title="Stoppen" aria-label="Nordlicht Studio stoppen"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Nordlicht Studio</a>
+            <span class="sub">nordlicht</span>
+          </span>
+        </span>
+        <a class="adr" href="#">nordlicht.localhost:5120</a>
+        <span class="meta">1 Std 12 Min</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+
+      <div class="zeile" data-projekt="folio">
+        <span class="punkt laeuft"></span>
+        <span class="power"><button type="button" class="knopf symbol stopp" title="Stoppen" aria-label="Folio Atlas stoppen"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Folio Atlas</a>
+            <span class="sub">folio</span>
+          </span>
+        </span>
+        <a class="adr" href="#">folio.localhost:5114</a>
+        <span class="meta">38 Min</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+
+      <div class="gruppe">
+        <span class="gruppe-titel">Gestoppt</span>
+        <span class="gruppe-meta"><span class="anzahl">4</span></span>
+      </div>
+
+      <div class="zeile" data-projekt="glasgarten">
+        <span class="punkt"></span>
+        <span class="power"><button type="button" class="knopf symbol start" title="Starten" aria-label="Glasgarten starten"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 2.6a.75.75 0 0 0-1.15.63v9.54a.75.75 0 0 0 1.15.63l7.7-4.77a.75.75 0 0 0 0-1.26L4.2 2.6Z"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Glasgarten</a>
+          </span>
+        </span>
+        <a class="adr aus" href="#">glasgarten.localhost:5118</a>
+        <span class="meta">gestoppt</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+
+      <div class="zeile" data-projekt="driftboard">
+        <span class="punkt"></span>
+        <span class="power"><button type="button" class="knopf symbol start" title="Starten" aria-label="Driftboard starten"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 2.6a.75.75 0 0 0-1.15.63v9.54a.75.75 0 0 0 1.15.63l7.7-4.77a.75.75 0 0 0 0-1.26L4.2 2.6Z"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Driftboard</a>
+          </span>
+        </span>
+        <a class="adr aus" href="#">driftboard.localhost:5111</a>
+        <span class="meta">gestoppt</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+
+      <div class="zeile" data-projekt="quiet-harbor">
+        <span class="punkt"></span>
+        <span class="power"><button type="button" class="knopf symbol start" title="Starten" aria-label="Quiet Harbor starten"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 2.6a.75.75 0 0 0-1.15.63v9.54a.75.75 0 0 0 1.15.63l7.7-4.77a.75.75 0 0 0 0-1.26L4.2 2.6Z"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Quiet Harbor</a>
+            <span class="sub">quiet-harbor</span>
+          </span>
+        </span>
+        <a class="adr aus" href="#">quiet-harbor.localhost:5122</a>
+        <span class="meta">gestoppt</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+
+      <div class="zeile" data-projekt="copperline">
+        <span class="punkt"></span>
+        <span class="power"><button type="button" class="knopf symbol start" title="Starten" aria-label="Copperline starten"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 2.6a.75.75 0 0 0-1.15.63v9.54a.75.75 0 0 0 1.15.63l7.7-4.77a.75.75 0 0 0 0-1.26L4.2 2.6Z"/></svg></button></span>
+        <span class="name">
+          <span class="name-text">
+            <a href="#">Copperline</a>
+          </span>
+        </span>
+        <a class="adr aus" href="#">copperline.localhost:5116</a>
+        <span class="meta">gestoppt</span>
+        <span class="aktionen"><details class="menu"><summary class="knopf leise menu-knopf" aria-label="Weitere Aktionen">⋯</summary></details></span>
+      </div>
+    </div>
+
+    <details class="kandidaten" data-gruppe="kein-port">
+      <summary>
+        <span class="kandidaten-label kandidaten-zu">9 Projekte ohne Slot anzeigen</span>
+        <span class="kandidaten-label kandidaten-auf">Ausblenden</span>
+        <span class="gruppe-chevron" aria-hidden="true"></span>
+      </summary>
+    </details>
+  </main>
+</div>
+
+</div>
+
+<footer class="fuss" id="fuss" aria-live="polite">
+  <span class="fuss-teil"><span class="fuss-host">devhub.localhost:4000</span></span>
+  <span class="fuss-sep" aria-hidden="true">·</span>
+  <span class="fuss-teil"><b>15</b> Projekte</span>
+  <span class="fuss-sep" aria-hidden="true">·</span>
+  <span class="fuss-teil"><b>6</b> mit Slot</span>
+  <span class="fuss-sep" aria-hidden="true">·</span>
+  <span class="fuss-teil"><b>2</b> laufen</span>
+  <span class="fuss-sep" aria-hidden="true">·</span>
+  <span class="fuss-teil">launchd <b>aktiv</b></span>
+</footer>
+
+</body>
+</html>
