@@ -103,7 +103,7 @@ export function applySettingsPatch(registry, patch = {}) {
   }
 
   if (next.hubPort !== vorherPort) {
-    warnings.push('Hub-Port geändert — danach Hub neu starten (`devhub service restart`).')
+    warnings.push('Hub-Port geändert — danach `devhub service install`, damit launchd den neuen Port lädt.')
   }
 
   registry.settings = next

@@ -98,6 +98,23 @@ Backends meist als `http://127.0.0.1:…`.
 
 ---
 
+## Oberfläche
+
+Die Übersicht unter [http://devhub.localhost:4000](http://devhub.localhost:4000)
+zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
+
+| Bereich | Route | Inhalt |
+| --- | --- | --- |
+| Übersicht | `/` | Projekte starten/stoppen, öffnen, Logs |
+| Verlauf | `/verlauf` | Letzte Aktionen |
+| Einstellungen | `/einstellungen` | Wurzeln, Hub-Port, Domain, Editor, Agent-Anzeige |
+
+- **Befehlspalette:** `⌘K` — Navigation, Projekte und Aktionen (auch Theme umschalten).
+- **Hell-/Dunkelmodus:** in den Einstellungen oder über die Palette; Speicherung im Browser (`localStorage`), nicht in der Registry.
+- **Einstellungen speichern:** Formular unten oder `⌘S`. Port-Änderungen brauchen danach `devhub service install`, damit launchd den neuen Hub-Port lädt.
+
+---
+
 ## Wichtige Kommandos
 
 | Kommando | Wirkung |
@@ -108,6 +125,7 @@ Backends meist als `http://127.0.0.1:…`.
 | `devhub down <projekt>` / `--alle` | Prozessgruppe stoppen |
 | `devhub restart <projekt>` | Stoppen und starten |
 | `devhub logs <projekt> [-f] [-n 40]` | Server-Ausgabe |
+| `devhub ports` | Slot- und Portvergabe anzeigen |
 | `devhub list` | Alle erkannten Projekte |
 | `devhub adopt <projekt>` | Slot vergeben |
 | `devhub forget <projekt>` | Aus der Registry (Slot bleibt gesperrt) |
@@ -115,10 +133,13 @@ Backends meist als `http://127.0.0.1:…`.
 | `devhub agents [projekt]` | Regeln / Skills / Memory anzeigen |
 | `devhub link [projekt]` | `AGENTS.md` ↔ `CLAUDE.md` verknüpfen |
 | `devhub doctor` | Kollisionen und Ungereimtheiten |
-| `devhub service install\|status\|uninstall` | launchd-Dienst |
-| `devhub open [projekt]` | Browser (oder `--finder` für den Ordner) |
+| `devhub serve [--port …]` | Hub im Vordergrund (ohne launchd) |
+| `devhub service install\|uninstall` | launchd-Dienst (ohne Argument: Status) |
+| `devhub open [projekt]` | Browser (oder `--finder` / `--ordner`) |
+| `devhub reveal <projekt>` | Projektordner im Finder |
 
 Ohne Projektnamen gilt das Verzeichnis, in dem du stehst.
+`dev` ist Alias für `devhub`.
 
 ---
 
@@ -248,7 +269,19 @@ Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 | Logs | `~/.local/state/devhub/logs/` |
 | launchd | `~/Library/LaunchAgents/dev.local.devhub.plist` |
 
-Diese Pfade gehören **nicht** ins Git deiner Anwendungsprojekte.
+In `registry.json` unter `settings` u. a.:
+
+| Schlüssel | Bedeutung | Standard |
+| --- | --- | --- |
+| `roots` | Projekt-Wurzelverzeichnisse | `~/Dev` (absolut) |
+| `hubPort` | Port der Hub-Oberfläche | `4000` |
+| `domainSuffix` | Domain für Projekt-URLs | `localhost` |
+| `editor` | Kommando für „Im Editor öffnen“ | `cursor` |
+| `readyTimeoutMs` | Wartezeit auf Server-Port | `60000` |
+| `showGlobalAgentContext` | Globale Agent-Dateien in der UI | `true` |
+
+Diese Pfade gehören **nicht** ins Git deiner Anwendungsprojekte. Das Theme der
+Oberfläche liegt nur im Browser, nicht in der Registry.
 
 ---
 

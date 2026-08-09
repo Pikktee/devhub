@@ -47,8 +47,13 @@ function setzeTheme(theme) {
   }
   const meta = document.querySelector('meta[name="color-scheme"]')
   if (meta) meta.content = wert
-  const schalter = document.querySelector('#einst-form [data-einst="theme"]')
-  if (schalter instanceof HTMLInputElement) schalter.checked = wert === 'light'
+  if (zustand.ansicht === 'einstellungen' && zustand.einstellungen.draft) {
+    for (const knopf of document.querySelectorAll('#einst-form [data-einst="theme-set"]')) {
+      const aktiv = knopf.dataset.theme === wert
+      knopf.classList.toggle('aktiv', aktiv)
+      knopf.setAttribute('aria-pressed', String(aktiv))
+    }
+  }
 }
 
 // ------------------------------------------------------------------ Netz
@@ -302,14 +307,16 @@ function rendereEinstellungen() {
   const timeoutSek = Math.round((draft.readyTimeoutMs ?? 60000) / 1000)
   const portHinweis =
     zustand.einstellungen.geladen && draft.hubPort !== zustand.einstellungen.geladen.hubPort
-      ? `<p class="einst-warnung">Port-Änderung wird erst nach Neustart des Hubs wirksam (<span class="mono">devhub service restart</span>).</p>`
+      ? `<p class="einst-warnung" role="status">Port-Änderung wird erst wirksam nach <span class="mono">devhub service install</span>.</p>`
       : ''
+  const theme = themeAktuell()
+  const rootAnzahl = draft.roots.length
 
   ziel.innerHTML = `
     <header class="einst-hero">
       <div class="einst-hero-text">
         <h2>Einstellungen</h2>
-        <p class="einst-untertitel">Globale Hub-Konfiguration für diese Maschine</p>
+        <p class="einst-untertitel">Gilt für diese Maschine — gespeichert in der Registry.</p>
       </div>
       <div class="einst-hero-meta">
         ${
@@ -327,24 +334,42 @@ function rendereEinstellungen() {
 
     <form class="einst-form" id="einst-form" novalidate>
       <div class="einst-blatt">
-        <section class="einst-sektion">
+        <section class="einst-sektion" aria-labelledby="einst-darstellung">
           <div class="einst-sektion-kopf">
-            <span class="einst-kicker">01</span>
-            <div>
-              <h3>Projekte</h3>
-              <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
+            <h3 id="einst-darstellung">Darstellung</h3>
+            <p>Sofort wirksam, ohne Speichern.</p>
+          </div>
+          <div class="einst-zeile">
+            <div class="einst-zeile-text">
+              <strong>Farbschema</strong>
+              <span>Helle oder dunkle Oberfläche.</span>
+            </div>
+            <div class="einst-segment" role="group" aria-label="Farbschema">
+              <button type="button" class="einst-segment-knopf${theme === 'dark' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="dark" aria-pressed="${theme === 'dark'}">Dunkel</button>
+              <button type="button" class="einst-segment-knopf${theme === 'light' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="light" aria-pressed="${theme === 'light'}">Hell</button>
             </div>
           </div>
+        </section>
+
+        <section class="einst-sektion" aria-labelledby="einst-projekte">
+          <div class="einst-sektion-kopf">
+            <h3 id="einst-projekte">Projekt-Wurzeln</h3>
+            <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
+          </div>
           <div class="einst-feld">
+            <div class="einst-roots-kopf">
+              <span class="einst-label">Verzeichnisse</span>
+              <span class="einst-roots-anzahl">${rootAnzahl}</span>
+            </div>
             <div class="einst-roots" id="einst-roots">
               ${
-                draft.roots.length
+                rootAnzahl
                   ? draft.roots
                       .map(
                         (pfad, i) => `<div class="einst-root">
                     <span class="einst-root-mark" aria-hidden="true"></span>
                     <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
-                    <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="Wurzel entfernen">×</button>
+                    <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="${h(pfad)} entfernen" ${rootAnzahl <= 1 ? 'disabled' : ''}>×</button>
                   </div>`
                       )
                       .join('')
@@ -352,42 +377,37 @@ function rendereEinstellungen() {
               }
             </div>
             <div class="einst-root-neu">
-              <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder /Users/…/Projekte" autocomplete="off" spellcheck="false">
+              <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder absoluter Pfad" autocomplete="off" spellcheck="false" aria-label="Neues Wurzelverzeichnis">
               <button type="button" class="knopf" data-einst="root-dazu">Hinzufügen</button>
             </div>
+            <span class="einst-hilfe"><kbd>↵</kbd> im Feld fügt den Pfad hinzu. Mindestens eine Wurzel bleibt nötig.</span>
           </div>
         </section>
 
-        <section class="einst-sektion">
+        <section class="einst-sektion" aria-labelledby="einst-hub">
           <div class="einst-sektion-kopf">
-            <span class="einst-kicker">02</span>
-            <div>
-              <h3>Hub</h3>
-              <p>Adresse und Domain für lokale Dev-Server.</p>
-            </div>
+            <h3 id="einst-hub">Hub &amp; Adressen</h3>
+            <p>Port der Übersicht und Domain für Projekt-URLs.</p>
           </div>
           <div class="einst-raster">
             <label class="einst-feld">
               <span class="einst-label">Hub-Port</span>
               <input type="number" name="hubPort" class="einst-input mono" min="1024" max="65535" step="1" value="${h(draft.hubPort)}" required>
-              <span class="einst-hilfe">Übersicht unter <span class="mono">http://devhub.localhost:${h(draft.hubPort)}</span></span>
+              <span class="einst-hilfe">Übersicht: <span class="mono">http://devhub.localhost:${h(draft.hubPort)}</span></span>
             </label>
             <label class="einst-feld">
               <span class="einst-label">Domain-Suffix</span>
               <input type="text" name="domainSuffix" class="einst-input mono" value="${h(draft.domainSuffix)}" required autocomplete="off" spellcheck="false">
-              <span class="einst-hilfe">Projektadressen wie <span class="mono">name.${h(draft.domainSuffix)}</span></span>
+              <span class="einst-hilfe">Projekte: <span class="mono">name.${h(draft.domainSuffix)}:…</span></span>
             </label>
           </div>
           ${portHinweis}
         </section>
 
-        <section class="einst-sektion">
+        <section class="einst-sektion" aria-labelledby="einst-werkzeuge">
           <div class="einst-sektion-kopf">
-            <span class="einst-kicker">03</span>
-            <div>
-              <h3>Werkzeuge</h3>
-              <p>Was „Im Editor öffnen“ startet.</p>
-            </div>
+            <h3 id="einst-werkzeuge">Werkzeuge</h3>
+            <p>Editor und Wartezeit beim Starten.</p>
           </div>
           <div class="einst-raster">
             <label class="einst-feld">
@@ -399,49 +419,28 @@ function rendereEinstellungen() {
                 <option value="zed"></option>
                 <option value="subl"></option>
               </datalist>
-              <span class="einst-hilfe">Muss im PATH liegen (z. B. cursor, code, zed).</span>
+              <span class="einst-hilfe">Für „Im Editor öffnen“ — muss im PATH liegen.</span>
             </label>
             <label class="einst-feld">
               <span class="einst-label">Bereitschafts-Timeout</span>
               <div class="einst-timeout">
-                <input type="number" name="readyTimeoutSek" class="einst-input mono" min="5" max="600" step="1" value="${h(timeoutSek)}" required>
+                <input type="number" name="readyTimeoutSek" class="einst-input mono" min="5" max="600" step="1" value="${h(timeoutSek)}" required aria-describedby="einst-timeout-hilfe">
                 <span class="einst-timeout-einheit">Sekunden</span>
               </div>
-              <span class="einst-hilfe">Wie lange der Hub auf den Port eines gestarteten Servers wartet.</span>
+              <span class="einst-hilfe" id="einst-timeout-hilfe">Maximale Wartezeit, bis der Server-Port antwortet.</span>
             </label>
           </div>
         </section>
 
-        <section class="einst-sektion">
+        <section class="einst-sektion" aria-labelledby="einst-agenten">
           <div class="einst-sektion-kopf">
-            <span class="einst-kicker">04</span>
-            <div>
-              <h3>Darstellung</h3>
-              <p>Hell- oder Dunkelmodus für die Oberfläche.</p>
-            </div>
-          </div>
-          <label class="einst-schalter">
-            <span class="einst-schalter-text">
-              <strong>Heller Modus</strong>
-              <span>Helle Oberfläche statt dunklem Standard.</span>
-            </span>
-            <input type="checkbox" name="hellmodus" data-einst="theme" ${themeAktuell() === 'light' ? 'checked' : ''}>
-            <span class="einst-schalter-ui" aria-hidden="true"></span>
-          </label>
-        </section>
-
-        <section class="einst-sektion">
-          <div class="einst-sektion-kopf">
-            <span class="einst-kicker">05</span>
-            <div>
-              <h3>Agenten</h3>
-              <p>Kontext für Coding-Agenten in der Detailansicht.</p>
-            </div>
+            <h3 id="einst-agenten">Agenten</h3>
+            <p>Was die Detailansicht unter Agent-Kontext zeigt.</p>
           </div>
           <label class="einst-schalter">
             <span class="einst-schalter-text">
               <strong>Globale Agent-Dateien zeigen</strong>
-              <span>CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis mit auflisten.</span>
+              <span>Zusätzlich CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis.</span>
             </span>
             <input type="checkbox" name="showGlobalAgentContext" ${draft.showGlobalAgentContext ? 'checked' : ''}>
             <span class="einst-schalter-ui" aria-hidden="true"></span>
@@ -449,7 +448,7 @@ function rendereEinstellungen() {
         </section>
       </div>
 
-      <div class="einst-leiste">
+      <div class="einst-leiste${dirty ? ' dirty' : ''}">
         <div class="einst-leiste-status" aria-live="polite">
           ${
             zustand.einstellungen.hinweis
@@ -461,7 +460,7 @@ function rendereEinstellungen() {
         </div>
         <div class="einst-leiste-aktionen">
           <button type="button" class="knopf leise" data-einst="zuruecksetzen" ${dirty ? '' : 'disabled'}>Zurücksetzen</button>
-          <button type="submit" class="knopf primaer" data-einst="speichern" ${dirty && !zustand.einstellungen.speichern ? '' : 'disabled'}>
+          <button type="submit" class="knopf primaer" data-einst="speichern" ${dirty && !zustand.einstellungen.speichern ? '' : 'disabled'} title="Speichern (⌘S)">
             ${zustand.einstellungen.speichern ? 'Speichert …' : 'Speichern'}
           </button>
         </div>
@@ -494,6 +493,7 @@ function syncEinstellungenDraftAusForm() {
   zustand.einstellungen.dirty = einstellungenDirty()
   zustand.einstellungen.hinweis = ''
   const dirty = zustand.einstellungen.dirty
+  form.querySelector('.einst-leiste')?.classList.toggle('dirty', dirty)
   const status = form.querySelector('.einst-leiste-status')
   if (status) {
     status.innerHTML = dirty
@@ -506,12 +506,12 @@ function syncEinstellungenDraftAusForm() {
   if (reset) reset.disabled = !dirty
   const portHilfe = form.querySelector('[name="hubPort"]')?.closest('.einst-feld')?.querySelector('.einst-hilfe')
   if (portHilfe) {
-    portHilfe.innerHTML = `Übersicht unter <span class="mono">http://devhub.localhost:${h(form.hubPort.value)}</span>`
+    portHilfe.innerHTML = `Übersicht: <span class="mono">http://devhub.localhost:${h(form.hubPort.value)}</span>`
   }
   const suffixHilfe = form.querySelector('[name="domainSuffix"]')?.closest('.einst-feld')?.querySelector('.einst-hilfe')
   if (suffixHilfe) {
     const suffix = h(String(form.domainSuffix.value || 'localhost').trim() || 'localhost')
-    suffixHilfe.innerHTML = `Projektadressen wie <span class="mono">name.${suffix}</span>`
+    suffixHilfe.innerHTML = `Projekte: <span class="mono">name.${suffix}:…</span>`
   }
 }
 
@@ -2989,11 +2989,15 @@ document.addEventListener('click', async (ereignis) => {
       const index = Number(einst.dataset.index)
       syncEinstellungenDraftAusForm()
       const draft = zustand.einstellungen.draft
-      if (Number.isFinite(index) && draft) {
+      if (Number.isFinite(index) && draft && draft.roots.length > 1) {
         draft.roots = draft.roots.filter((_, i) => i !== index)
       }
       zustand.einstellungen.hinweis = ''
       rendereEinstellungen()
+      return
+    }
+    if (art === 'theme-set') {
+      setzeTheme(einst.dataset.theme === 'light' ? 'light' : 'dark')
       return
     }
     if (art === 'zuruecksetzen') {
@@ -3033,10 +3037,6 @@ document.addEventListener('input', (ereignis) => {
 
 document.addEventListener('change', (ereignis) => {
   if (ereignis.target.id === 'folgen') zustand.log.folgen = ereignis.target.checked
-  if (ereignis.target.matches?.('[data-einst="theme"]')) {
-    setzeTheme(ereignis.target.checked ? 'light' : 'dark')
-    return
-  }
   if (ereignis.target.closest?.('#einst-form')) syncEinstellungenDraftAusForm()
 })
 
@@ -3058,6 +3058,17 @@ document.addEventListener('keydown', (ereignis) => {
     (ereignis.target.matches('input, textarea, select') || ereignis.target.isContentEditable)
 
   const meta = ereignis.metaKey || ereignis.ctrlKey
+  if (
+    meta &&
+    !ereignis.altKey &&
+    !ereignis.shiftKey &&
+    ereignis.key.toLowerCase() === 's' &&
+    zustand.ansicht === 'einstellungen'
+  ) {
+    ereignis.preventDefault()
+    if (einstellungenDirty() && !zustand.einstellungen.speichern) return speichereEinstellungen()
+    return
+  }
   if (meta && !ereignis.altKey && !ereignis.shiftKey && ereignis.key.toLowerCase() === 'k') {
     ereignis.preventDefault()
     if (befehlOffen()) schliesseBefehl()
