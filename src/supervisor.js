@@ -169,7 +169,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
       logLine(fd, `! auf ${drifted.join(', ')} ausgewichen statt ${proc.port} — gestoppt`)
       await stopGroup(proc.pgid)
       warnings.push(
-        `${name}/${proc.name} ist auf ${drifted.join(', ')} ausgewichen statt ${proc.port} — Startkommando in dev.json fixieren`
+        `${name}/${proc.name} ist auf ${drifted.join(', ')} ausgewichen statt ${proc.port} — Startkommando in devhub.json fixieren`
       )
     } else {
       logLine(fd, `! nicht bereit (${result.reason}) — siehe Log`)
@@ -251,6 +251,7 @@ export async function instanceStatus(project, profile, recorded, { withMemory = 
       runner: spec.runner,
       port: spec.port,
       url: spec.url,
+      paths: spec.paths,
       pid: rec?.pid,
       pgid: rec?.pgid,
       logFile: rec?.logFile ?? (project.name ? logFileFor(project.name, profile, spec.name) : undefined),

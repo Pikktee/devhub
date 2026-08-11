@@ -37,7 +37,7 @@ test('startet abgekoppelt, ist idempotent und stoppt die ganze Gruppe', async (t
   registryStore.save(registry)
 
   const projekt = describeProject(registryStore.load(), 'brav')
-  assert.equal(projekt.source, 'abgeleitet', 'ohne dev.json aus package.json abgeleitet')
+  assert.equal(projekt.source, 'abgeleitet', 'ohne devhub.json aus package.json abgeleitet')
   assert.equal(projekt.profiles.default[0].port, portFor(slot, 'frontend'))
 
   t.after(async () => {
@@ -70,7 +70,7 @@ test('erkennt, wenn ein Server auf eine andere Nummer ausweicht', async (t) => {
   registryStore.save(registry)
 
   const projekt = describeProject(registryStore.load(), 'ausweicher')
-  assert.equal(projekt.source, 'dev.json', 'die deutschen Schlüssel aus dem Plan werden gelesen')
+  assert.equal(projekt.source, 'devhub.json', 'die deutschen Schlüssel aus dem Plan werden gelesen')
 
   t.after(async () => {
     await supervisor.down('ausweicher', { registry: registryStore.load() })

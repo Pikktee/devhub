@@ -202,7 +202,7 @@ Python unter `web/` + `uv`) können abgeleitet werden.
 Wenn der Hub „kein Server“ meldet, oft korrekt (Notizen, Native-Apps, Sammelordner).
 Unterordner einzeln aufnehmen: `devhub adopt monorepo/app`.
 
-### Optional: `dev.json`
+### Optional: `devhub.json`
 
 Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle):
 
@@ -231,7 +231,7 @@ Platzhalter: `{port}`, `{host}`, `{url}`, `{project}`, `{profile}`, `{path}`
 (deutsche Schlüsselnamen werden ebenso akzeptiert.)
 
 Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)
-wird ohne `dev.json` abgeleitet — bei vorhandenem `.venv` mit dessen Interpreter.
+wird ohne `devhub.json` abgeleitet — bei vorhandenem `.venv` mit dessen Interpreter.
 Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 
 ```json
@@ -345,11 +345,11 @@ Einen älteren Hub-Block in `AGENTS.md` entfernt `devhub forget` bzw. unsync.
 Derzeit **nein**. Der Dauerbetrieb hängt an **launchd** (macOS). Beiträge für
 systemd o. Ä. wären willkommen, sind aber noch nicht gebaut.
 
-### Muss jedes Projekt `dev.json` haben?
+### Muss jedes Projekt `devhub.json` haben?
 
 Nein. Node mit üblichem Dev-Skript und einfaches Python (`app.py`/`main.py` mit
-`PORT`) meist automatisch. `dev.json` für Compose, uvicorn-Modulpfade und
-Sonderfälle.
+`PORT`) meist automatisch. `devhub.json` für Compose, uvicorn-Modulpfade und
+Sonderfälle. (Ältere `dev.json` wird noch gelesen.)
 
 ### Kann ich die Registry / Ports von einem Mac auf den anderen kopieren?
 

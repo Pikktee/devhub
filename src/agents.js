@@ -125,7 +125,7 @@ export function globalContext(projectPath) {
 const GAP_CHECKS = [
   { path: '.cursor/rules/devhub.local.mdc', hint: 'Keine lokale Cursor-Regel — "devhub sync" schreibt Ports nur lokal' },
   { path: '.claude/launch.json', hint: 'Keine Attach-Datei — "devhub sync" erzeugt sie lokal (gitignore)' },
-  { path: 'dev.json', hint: 'Kein dev.json — der Hub leitet den Start oft aus package.json / app.py ab' }
+  { path: 'devhub.json', hint: 'Kein devhub.json — der Hub leitet den Start oft aus package.json / app.py ab' }
 ]
 
 export function agentContext(projectPath, { includeGlobal = true } = {}) {

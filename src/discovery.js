@@ -93,15 +93,25 @@ function normalizeSpec(raw, index) {
     composeFile: raw.composeFile ?? raw.compose,
     service: raw.service,
     healthPath: raw.healthPath ?? '/',
-    readyTimeoutMs: raw.readyTimeoutMs
+    readyTimeoutMs: raw.readyTimeoutMs,
+    paths: Array.isArray(raw.paths ?? raw.pfade) ? (raw.paths ?? raw.pfade) : undefined
   }
+}
+
+/** Bevorzugt `devhub.json`; `dev.json` bleibt als Legacy-Fallback. */
+function findDevhubConfigFile(dir) {
+  const preferred = join(dir, 'devhub.json')
+  if (existsSync(preferred)) return preferred
+  const legacy = join(dir, 'dev.json')
+  if (existsSync(legacy)) return legacy
+  return null
 }
 
 /** Der Plan schreibt `profile`/`rolle`, englische Schlüssel sind ebenso erlaubt —
  *  eine Datei, die schon existiert, soll nicht an einer Vokabel scheitern. */
 export function readDevJson(dir) {
-  const file = join(dir, 'dev.json')
-  if (!existsSync(file)) return null
+  const file = findDevhubConfigFile(dir)
+  if (!file) return null
   const raw = readJson(file)
   const profilesRaw = raw.profiles ?? raw.profile
   if (!profilesRaw || typeof profilesRaw !== 'object') {
@@ -270,7 +280,7 @@ function inferPythonProfiles(dir) {
  */
 function diagnose(dir, stack) {
   if (stack.kind === 'python') {
-    return 'Python-Projekt ohne erkennbaren Einstieg (app.py/main.py) — Startkommando in dev.json festlegen'
+    return 'Python-Projekt ohne erkennbaren Einstieg (app.py/main.py) — Startkommando in devhub.json festlegen'
   }
 
   let unterprojekte = []
@@ -289,7 +299,7 @@ function diagnose(dir, stack) {
   if (unterprojekte.length === 1) {
     return `Startbares liegt in ${unterprojekte[0]}/ — "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
   }
-  return 'Kein Server erkennbar — falls doch einer laufen soll, dev.json anlegen'
+  return 'Kein Server erkennbar — falls doch einer laufen soll, devhub.json anlegen'
 }
 
 export function scanRoots(roots) {
@@ -370,7 +380,8 @@ function isScaffoldPackageName(name) {
 }
 
 function titleFromDevJson(dir) {
-  const raw = readJson(join(dir, 'dev.json'), null)
+  const file = findDevhubConfigFile(dir)
+  const raw = file ? readJson(file, null) : null
   if (!raw || typeof raw !== 'object') return null
   for (const key of ['displayName', 'title']) {
     if (typeof raw[key] === 'string' && raw[key].trim()) return raw[key].trim()
@@ -519,7 +530,7 @@ export function describeProject(registry, name) {
     const devJson = readDevJson(base.path)
     if (devJson) {
       profiles = devJson.profiles
-      source = 'dev.json'
+      source = basename(devJson.file)
     }
   } catch (err) {
     problems.push(err.message)

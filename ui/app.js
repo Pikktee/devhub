@@ -448,25 +448,46 @@ function rendereEinstellungen() {
         </section>
       </div>
 
-      <div class="einst-leiste${dirty ? ' dirty' : ''}">
-        <div class="einst-leiste-status" aria-live="polite">
-          ${
-            zustand.einstellungen.hinweis
-              ? `<span class="einst-hinweis">${h(zustand.einstellungen.hinweis)}</span>`
-              : dirty
-                ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
-                : `<span class="einst-sauber">Alles gespeichert</span>`
-          }
-        </div>
-        <div class="einst-leiste-aktionen">
-          <button type="button" class="knopf leise" data-einst="zuruecksetzen" ${dirty ? '' : 'disabled'}>Zurücksetzen</button>
-          <button type="submit" class="knopf primaer" data-einst="speichern" ${dirty && !zustand.einstellungen.speichern ? '' : 'disabled'} title="Speichern (⌘S)">
-            ${zustand.einstellungen.speichern ? 'Speichert …' : 'Speichern'}
-          </button>
+      <div class="einst-dock">
+        <div class="einst-leiste${dirty ? ' dirty' : ''}">
+          <div class="einst-leiste-status" aria-live="polite">
+            ${
+              zustand.einstellungen.hinweis
+                ? `<span class="einst-hinweis">${h(zustand.einstellungen.hinweis)}</span>`
+                : dirty
+                  ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
+                  : `<span class="einst-sauber">Alles gespeichert</span>`
+            }
+          </div>
+          <div class="einst-leiste-aktionen">
+            <button type="button" class="knopf leise" data-einst="zuruecksetzen" ${dirty ? '' : 'disabled'}>Zurücksetzen</button>
+            <button type="submit" class="knopf primaer" data-einst="speichern" ${dirty && !zustand.einstellungen.speichern ? '' : 'disabled'} title="Speichern (⌘S)">
+              ${zustand.einstellungen.speichern ? 'Speichert …' : 'Speichern'}
+            </button>
+          </div>
         </div>
       </div>
     </form>
   `
+  planeEinstDockScrim()
+}
+
+/** Fade nur solange Inhalt unter dem sticky Dock durchscrollt. */
+function syncEinstDockScrim() {
+  const dock = document.querySelector('.einst-dock')
+  const blatt = document.querySelector('.einst-blatt')
+  if (!dock || !blatt || zustand.ansicht !== 'einstellungen') return
+  const ueberlappt = blatt.getBoundingClientRect().bottom > dock.getBoundingClientRect().top + 1
+  dock.classList.toggle('am-ende', !ueberlappt)
+}
+
+let einstDockScrimRaf = 0
+function planeEinstDockScrim() {
+  if (einstDockScrimRaf) return
+  einstDockScrimRaf = requestAnimationFrame(() => {
+    einstDockScrimRaf = 0
+    syncEinstDockScrim()
+  })
 }
 
 function einstellungenAusForm(form) {
@@ -845,6 +866,35 @@ function menuLink(label, href, title = '') {
   return `<a class="menu-eintrag" role="menuitem" href="${h(href)}" target="_blank" rel="noreferrer" title="${h(title || href)}">${h(label)}</a>`
 }
 
+/** Einstiegs-URLs aus `paths` in der Spec — Basis-URL + Pfad, Label optional. */
+function einstiegeVon(proc) {
+  if (!proc?.url || !proc.paths?.length) return []
+  const basis = proc.url.replace(/\/$/, '')
+  return proc.paths
+    .map((p) => {
+      const pfad = typeof p === 'string' ? p : p?.path ?? p?.pfad
+      if (!pfad) return null
+      const label = (typeof p === 'object' && (p.label ?? p.name)) || pfad
+      return {
+        label,
+        path: pfad,
+        href: `${basis}/${String(pfad).replace(/^\//, '')}`
+      }
+    })
+    .filter(Boolean)
+}
+
+function einstiegeHtml(proc, { listening = true, klasse = 'einstieg' } = {}) {
+  const einstiege = einstiegeVon(proc)
+  if (!einstiege.length) return ''
+  return `<div class="einstiegspfade">${einstiege
+    .map(
+      (e) =>
+        `<a class="${klasse}${listening ? '' : ' aus'}" href="${h(e.href)}" target="_blank" rel="noreferrer" title="${h(e.href)}">${h(e.label)}</a>`
+    )
+    .join('')}</div>`
+}
+
 function zeilenMenu(projekt, { profil, mitLog = false, mitNeu = false, mitAnsehen = false } = {}) {
   const ort = [menuKnopf('Im Finder zeigen', { aktion: 'finder', projekt: projekt.name })]
   if (projekt.github?.url) {
@@ -871,17 +921,29 @@ function zeilenMenu(projekt, { profil, mitLog = false, mitNeu = false, mitAnsehe
     )
   }
 
+  const einstiege = []
+  if (profil) {
+    for (const proc of profil.processes) {
+      for (const e of einstiegeVon(proc)) {
+        einstiege.push(menuLink(e.label, e.href))
+      }
+    }
+  }
+
   const mehr = []
   if (mitAnsehen) {
     mehr.push(menuKnopf('Details ansehen', { aktion: 'detail', projekt: projekt.name }))
   }
 
-  return aktionenMenu([ort, server, mehr])
+  return aktionenMenu([ort, einstiege, server, mehr])
 }
 
 function zeileHtml(projekt, profil) {
   const laeuft = profil.state === 'läuft' || profil.state === 'teilweise'
-  const adresse = profil.processes.find((p) => p.role === 'frontend')?.url ?? profil.processes[0]?.url
+  const haupt =
+    profil.processes.find((p) => p.role === 'frontend') ?? profil.processes[0]
+  const adresse = haupt?.url
+  const einstiege = haupt ? einstiegeVon(haupt) : []
   const konflikt = profil.processes.some((p) => p.foreign)
 
   const zustandText = laeuft
@@ -906,11 +968,24 @@ function zeileHtml(projekt, profil) {
     ? `<span class="hinweis">Ein fremder Prozess belegt ${h(profil.processes.filter((p) => p.foreign).map((p) => p.port).join(', '))} — der Hub hat ihn nicht gestartet.</span>`
     : ''
 
+  // Mit Einstiegen: Labels als Adresse (klickbar), Basis nur als Tooltip.
+  // Sonst weiter die Host:Port-URL wie bisher.
+  const adrHtml = einstiege.length
+    ? `<span class="adr-zelle${laeuft ? '' : ' aus'}">${einstiege
+        .map(
+          (e) =>
+            `<a class="einstieg${laeuft ? '' : ' aus'}" href="${h(e.href)}" target="_blank" rel="noreferrer" title="${h(e.href)}">${h(e.label)}</a>`
+        )
+        .join('<span class="adr-trenner" aria-hidden="true">·</span>')}</span>`
+    : adresse
+      ? `<a class="adr${laeuft ? '' : ' aus'}" href="${h(adresse)}" target="_blank" rel="noreferrer">${h(adresse.replace(/^https?:\/\//, ''))}</a>`
+      : '<span class="adr aus">—</span>'
+
   return `<div class="zeile${konflikt ? ' warnung' : ''}" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">
     <span class="${konflikt ? 'punkt warnung' : punktKlasse(profil.state)}"></span>
     <span class="power">${powerKnopfHtml(projekt, profil)}</span>
     ${nameHtml(projekt, '', { title: nameTitel || undefined })}
-    ${adresse ? `<a class="adr${laeuft ? '' : ' aus'}" href="${h(adresse)}" target="_blank" rel="noreferrer">${h(adresse.replace(/^https?:\/\//, ''))}</a>` : '<span class="adr aus">—</span>'}
+    ${adrHtml}
     <span class="meta">${h(zustandText)}</span>
     <span class="aktionen">${menu}</span>
     ${hinweis}
@@ -1146,6 +1221,7 @@ function prozessHtml(projekt, profil, proc) {
     proc.pid ? `PID ${proc.pid}` : proc.runner === 'compose' ? 'compose' : null,
     proc.memory ? speicher(proc.memory) : null
   ].filter(Boolean)
+  const einstiege = einstiegeVon(proc)
 
   return `<div class="prozess" data-prozess="${h(proc.name)}">
     <span class="${proc.listening ? 'punkt laeuft' : 'punkt'}" aria-hidden="true"></span>
@@ -1160,12 +1236,17 @@ function prozessHtml(projekt, profil, proc) {
           : '<span class="adr aus">keine Adresse</span>'
       }
       ${meta.length ? `<span class="meta">${h(meta.join(' · '))}</span>` : ''}
+      ${einstiegeHtml(proc, { listening: proc.listening })}
     </div>
     <span class="aktionen">
       ${
-        proc.url && proc.listening
-          ? `<a class="knopf leise" href="${h(proc.url)}" target="_blank" rel="noreferrer">Öffnen</a>`
-          : ''
+        einstiege.length && proc.listening
+          ? einstiege
+              .map((e) => `<a class="knopf leise" href="${h(e.href)}" target="_blank" rel="noreferrer">${h(e.label)}</a>`)
+              .join('')
+          : proc.url && proc.listening
+            ? `<a class="knopf leise" href="${h(proc.url)}" target="_blank" rel="noreferrer">Öffnen</a>`
+            : ''
       }
       <button class="knopf leise" data-aktion="log" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}" data-prozess="${h(proc.name)}">Log</button>
     </span>
@@ -1946,7 +2027,16 @@ function listenSignaturVon(daten) {
               profil.state,
               profil.startedAt ?? '',
               ...(profil.processes ?? []).map((proc) =>
-                [proc.name, proc.role, proc.port ?? '', proc.listening ? 1 : 0, proc.pid ?? '', proc.foreign ? 1 : 0, proc.url ?? ''].join(':')
+                [
+                  proc.name,
+                  proc.role,
+                  proc.port ?? '',
+                  proc.listening ? 1 : 0,
+                  proc.pid ?? '',
+                  proc.foreign ? 1 : 0,
+                  proc.url ?? '',
+                  JSON.stringify(proc.paths ?? [])
+                ].join(':')
               )
             ].join('/')
           )
@@ -2430,6 +2520,22 @@ function baueProjektAktionen(projekt) {
             window.open(adresse, '_blank', 'noopener')
           }
         })
+      }
+      for (const proc of profil.processes) {
+        if (!proc.listening) continue
+        for (const e of einstiegeVon(proc)) {
+          push({
+            id: `projekt:${ordner}:pfad:${profil.profile}:${e.path}`,
+            label: `${e.label}${profilSuffix}`,
+            hint: e.href.replace(/^https?:\/\//, ''),
+            meta: 'url',
+            gruppe: 'Einstieg',
+            punkt: punktKlasse(profil.state),
+            projekt: ordner,
+            keywords: [...profilKeys, 'einstieg', 'pfad', 'öffnen', e.label, e.path],
+            ausfuehren: () => { window.open(e.href, '_blank', 'noopener') }
+          })
+        }
       }
     } else {
       push({
@@ -3145,6 +3251,9 @@ document.addEventListener('toggle', (ereignis) => {
     }
   }
 }, true)
+
+addEventListener('scroll', planeEinstDockScrim, { passive: true })
+addEventListener('resize', planeEinstDockScrim, { passive: true })
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {

@@ -162,7 +162,7 @@ test('Anzeigename wird aus Projektquellen abgeleitet, nicht erfunden', () => {
   const withTitle = join(root, 'journey')
   mkdirSync(withTitle)
   writeFileSync(
-    join(withTitle, 'dev.json'),
+    join(withTitle, 'devhub.json'),
     JSON.stringify({ title: 'Maptale', profiles: { default: [{ name: 'web', role: 'frontend', cmd: ['echo'] }] } })
   )
   writeFileSync(join(withTitle, 'package.json'), JSON.stringify({ name: '@acme/journey' }))
