@@ -42,8 +42,10 @@
   --gruen-wash: 12%;
 
   /* Atmosphäre & Form */
+  --tinte: #02060c;
   --korn: 0.045;
-  --schatten: 0 18px 40px -18px color-mix(in srgb, #02060c 78%, transparent);
+  --dimmer: color-mix(in srgb, var(--tinte) 58%, transparent);
+  --schatten: 0 18px 40px -18px color-mix(in srgb, var(--tinte) 78%, transparent);
   --radius: 10px;
   --radius-sm: 6px;
   --font: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -80,8 +82,10 @@
   --akzent-wash: 14%;
   --gruen-wash: 8%;
 
+  --tinte: #1a2a40;
   --korn: 0.02;
-  --schatten: 0 14px 32px -14px color-mix(in srgb, #1a2a40 22%, transparent);
+  --dimmer: color-mix(in srgb, var(--tinte) 40%, transparent);
+  --schatten: 0 14px 32px -14px color-mix(in srgb, var(--tinte) 22%, transparent);
 }
 
 /* Ohne gesetztes data-theme: Systemvorgabe (nur bis das Inline-Script greift). */
@@ -114,7 +118,9 @@
     --akzent-wash: 14%;
     --gruen-wash: 8%;
 
+    --tinte: #1a2a40;
     --korn: 0.02;
-    --schatten: 0 14px 32px -14px color-mix(in srgb, #1a2a40 22%, transparent);
+    --dimmer: color-mix(in srgb, var(--tinte) 40%, transparent);
+    --schatten: 0 14px 32px -14px color-mix(in srgb, var(--tinte) 22%, transparent);
   }
 }

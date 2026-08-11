@@ -42,7 +42,7 @@ body::before {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   background: var(--akzent);
-  color: #fff;
+  color: var(--akzent-text);
   text-decoration: none;
   font-weight: 600;
   transform: translateY(-140%);
@@ -362,7 +362,7 @@ body::before {
 .knopf.primaer:hover {
   background: var(--akzent-hell);
   border-color: var(--akzent-hell);
-  color: #fff;
+  color: var(--akzent-text);
 }
 .knopf.leise {
   background: none; border-color: transparent; color: var(--text-leise); padding: 6px 8px;
@@ -375,8 +375,9 @@ body::before {
   background: var(--rot-leise);
 }
 .knopf.gefahr.fest {
+  /* Reines Weiß auf kräftigem Rot — --akzent-text wäre im Dark zu kühl. */
   color: #fff;
-  background: color-mix(in srgb, var(--rot) 78%, #2a0c10);
+  background: color-mix(in srgb, var(--rot) 78%, var(--bg-tief));
   border-color: color-mix(in srgb, var(--rot) 65%, var(--rand-stark));
 }
 .knopf.gefahr.fest:hover {
@@ -1710,7 +1711,7 @@ pre.log .hl { color: var(--text); }
   height: 18px;
   border-radius: 50%;
   background: var(--text);
-  box-shadow: 0 1px 2px color-mix(in srgb, #02060c 30%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tinte) 30%, transparent);
   transition: transform 160ms var(--ease);
 }
 .einst-schalter:has(input:checked) .einst-schalter-ui {
@@ -1719,6 +1720,7 @@ pre.log .hl { color: var(--text); }
 }
 .einst-schalter:has(input:checked) .einst-schalter-ui::after {
   transform: translateX(18px);
+  /* Reines Weiß auf Akzent-Thumb — siehe DESIGN.md */
   background: #fff;
 }
 .einst-schalter-text {
@@ -1989,7 +1991,7 @@ pre.log .hl { color: var(--text); }
   box-shadow: var(--schatten);
 }
 .protokoll::backdrop {
-  background: color-mix(in srgb, #02060c 55%, transparent);
+  background: var(--dimmer);
 }
 .protokoll-kopf {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -2080,8 +2082,8 @@ pre.log .hl { color: var(--text); }
   color: var(--gruen);
   padding-top: 2px;
 }
-.protokoll-status[data-status="gelöscht"] { color: var(--rot, #c44); }
-.protokoll-status[data-status="neu"] { color: var(--blau, #3b82f6); }
+.protokoll-status[data-status="gelöscht"] { color: var(--rot); }
+.protokoll-status[data-status="neu"] { color: var(--blau); }
 .protokoll-leer {
   margin: 0;
   color: var(--text-leise);
@@ -2139,7 +2141,7 @@ pre.log .hl { color: var(--text); }
   box-shadow: var(--schatten);
 }
 .datei-dialog::backdrop {
-  background: color-mix(in srgb, #02060c 58%, transparent);
+  background: var(--dimmer);
   backdrop-filter: blur(2px);
 }
 .datei-kopf {
@@ -2286,7 +2288,7 @@ pre.log .hl { color: var(--text); }
   box-shadow: var(--schatten);
 }
 .bestaetigung::backdrop {
-  background: color-mix(in srgb, #02060c 58%, transparent);
+  background: var(--dimmer);
   backdrop-filter: blur(2px);
 }
 .bestaetigung-kopf {
@@ -2448,7 +2450,7 @@ pre.log .hl { color: var(--text); }
 /* display:flex nur im offenen Zustand — sonst bleibt der Dialog sichtbar. */
 .befehl[open] { display: flex; }
 .befehl::backdrop {
-  background: color-mix(in srgb, #02060c 58%, transparent);
+  background: var(--dimmer);
   backdrop-filter: blur(2px);
 }
 .befehl-feld {

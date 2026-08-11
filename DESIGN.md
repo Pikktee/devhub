@@ -50,13 +50,13 @@ Textfarbe zu ändern reicht nicht — sonst kippt der Kontrast.
 
 ### Linien & Fokus
 
-| Token | Rolle |
-|---|---|
-| `--rand` | Standardrahmen |
-| `--rand-stark` | betonte Kante / Hover-Rand |
-| `--fokus` | Tastaturfokus-Ring (akzenthell auf `--bg`) |
+| Token | Rolle | Dark | Light |
+|---|---|---|---|
+| `--rand` | Standardrahmen | `#2a3648` | `#d0d7e2` |
+| `--rand-stark` | betonte Kante / Hover-Rand | `#3d4d63` | `#b4bfcf` |
+| `--fokus` | Tastaturfokus-Ring | `0 0 0 2px var(--bg), 0 0 0 4px var(--akzent-hell)` | gleich |
 
-### Akzent & Status
+### Akzent
 
 | Token | Rolle | Dark | Light |
 |---|---|---|---|
@@ -64,20 +64,40 @@ Textfarbe zu ändern reicht nicht — sonst kippt der Kontrast.
 | `--akzent-hell` | Hover/Focus auf Akzent | `#5b9fd4` | `#2a78b8` |
 | `--akzent-text` | Text auf Akzentfläche | `#d6e8f7` | `#ffffff` |
 | `--akzent-wash` | Anteil Akzent im Seitenverlauf | `22%` | `14%` |
-| `--gruen` / `--gelb` / `--rot` / `--blau` | Status | siehe `tokens.css` | siehe `tokens.css` |
-| `--*-leise` | Status-Waschungen | `color-mix` aus der Statusfarbe | |
+| `--gruen-wash` | Anteil Grün im Seitenverlauf | `12%` | `8%` |
 
-### Form, Typo, Bewegung
+### Status
 
-| Token | Wert | Rolle |
-|---|---|---|
-| `--radius` | `10px` | Karten, große Controls |
-| `--radius-sm` | `6px` | Chips, Segment-Knöpfe |
-| `--font` | IBM Plex Sans … | UI-Text |
-| `--mono` | IBM Plex Mono … | Pfade, Ports, Registry |
-| `--ease` | `cubic-bezier(0.22, 1, 0.36, 1)` | Standard-Transition |
-| `--schatten` | themenabhängig | seltene Elevation |
-| `--korn` | `0.045` / `0.02` | dezentes Filmgrain |
+| Token | Rolle | Dark | Light |
+|---|---|---|---|
+| `--gruen` | läuft / ok | `#3dba7a` | `#1a7a4c` |
+| `--gelb` | Warnung | `#d4a017` | `#9a5b08` |
+| `--rot` | Fehler / Gefahr | `#e06c75` | `#c03948` |
+| `--blau` | Links, Info | `#6eb0e0` | `#1a6fa5` |
+| `--gruen-leise` | Grün-Waschung | `color-mix(… var(--gruen) 18%, transparent)` | erbt Mix |
+| `--gelb-leise` | Gelb-Waschung | `color-mix(… var(--gelb) 14%, transparent)` | erbt Mix |
+| `--rot-leise` | Rot-Waschung | `color-mix(… var(--rot) 14%, transparent)` | erbt Mix |
+
+Die `*-leise`-Tokens nutzen `color-mix` auf der Statusfarbe und folgen dem
+Theme automatisch, ohne eigene Light-Overrides.
+
+### Atmosphäre & Form
+
+| Token | Dark | Light | Rolle |
+|---|---|---|---|
+| `--tinte` | `#02060c` | `#1a2a40` | Basis für Schatten und Dimmer |
+| `--dimmer` | `color-mix(tinte 58%)` | `color-mix(tinte 40%)` | Dialog-`::backdrop` |
+| `--schatten` | weich, stark | flacher | seltene Elevation |
+| `--korn` | `0.045` | `0.02` | dezentes Filmgrain |
+| `--radius` | `10px` | | Karten, große Controls |
+| `--radius-sm` | `6px` | | Chips, Segment-Knöpfe |
+| `--font` | IBM Plex Sans … | | UI-Text |
+| `--mono` | IBM Plex Mono … | | Pfade, Ports, Registry |
+| `--ease` | `cubic-bezier(0.22, 1, 0.36, 1)` | | Standard-Transition |
+
+Komponenten dürfen geometrische Einmalradien behalten (Pills `999px`,
+Focus-Ecken `3px`, Logo `7px`). Neue **Farben** gehören immer zuerst hier
+und in `tokens.css`.
 
 ## Hierarchie in Einstellungen
 
@@ -100,4 +120,5 @@ ui/app.js                 ← Verhalten, keine Farben hardcoden
 
 Neue Farbe oder Radius: zuerst hier und in `tokens.css`, dann verwenden.
 Keine magischen Hex-Werte in Komponentenregeln, außer unvermeidbare
-Einmalfälle (z. B. reines Weiß auf Akzent-Thumb) — die gehören kommentiert.
+Einmalfälle (z. B. reines Weiß auf Akzent-Thumb oder Gefahr-Knopf) — die
+gehören kommentiert.
