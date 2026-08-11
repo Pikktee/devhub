@@ -24,6 +24,15 @@ const zustand = {
 }
 
 const THEME_KEY = 'devhub-theme'
+const EINST_SEKTIONEN_KEY = 'devhub-einst-sektionen'
+const EINST_SEKTIONEN_DEFAULT = {
+  oberflaeche: true,
+  projekte: true,
+  hub: false,
+  werkzeuge: false,
+  agenten: false
+}
+const EINST_CHEVRON = `<svg class="einst-sektion-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
 function themeAktuell() {
   const attr = document.documentElement.dataset.theme
@@ -35,6 +44,42 @@ function themeAktuell() {
     /* ignore */
   }
   return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+}
+
+function einstSektionenOffen() {
+  try {
+    const roh = localStorage.getItem(EINST_SEKTIONEN_KEY)
+    if (!roh) return { ...EINST_SEKTIONEN_DEFAULT }
+    const gelesen = JSON.parse(roh)
+    if (!gelesen || typeof gelesen !== 'object') return { ...EINST_SEKTIONEN_DEFAULT }
+    return { ...EINST_SEKTIONEN_DEFAULT, ...gelesen }
+  } catch {
+    return { ...EINST_SEKTIONEN_DEFAULT }
+  }
+}
+
+function setzeEinstSektion(id, offen) {
+  if (!id || !(id in EINST_SEKTIONEN_DEFAULT)) return
+  const stand = einstSektionenOffen()
+  stand[id] = Boolean(offen)
+  try {
+    localStorage.setItem(EINST_SEKTIONEN_KEY, JSON.stringify(stand))
+  } catch {
+    /* ignore */
+  }
+}
+
+function einstSektionHtml({ id, titel, meta, koerper, offen }) {
+  return `<details class="einst-sektion" data-einst-sektion="${h(id)}"${offen ? ' open' : ''}>
+    <summary class="einst-sektion-kopf">
+      <span class="einst-sektion-text">
+        <span class="einst-sektion-titel">${titel}</span>
+        <span class="einst-sektion-meta">${meta}</span>
+      </span>
+      ${EINST_CHEVRON}
+    </summary>
+    <div class="einst-sektion-koerper">${koerper}</div>
+  </details>`
 }
 
 function setzeTheme(theme) {
@@ -53,6 +98,8 @@ function setzeTheme(theme) {
       knopf.classList.toggle('aktiv', aktiv)
       knopf.setAttribute('aria-pressed', String(aktiv))
     }
+    const sektionMeta = document.querySelector('[data-einst-sektion="oberflaeche"] .einst-sektion-meta')
+    if (sektionMeta) sektionMeta.textContent = wert === 'light' ? 'Hell' : 'Dunkel'
   }
 }
 
@@ -344,14 +391,26 @@ function rendereEinstellungen() {
       : ''
   const theme = themeAktuell()
   const rootAnzahl = draft.roots.length
+  const offen = einstSektionenOffen()
   const registryMeta = draft.registryFile
     ? `<span class="einst-datei" title="${h(draft.registryFile)}">
         <span class="meta mono">${h(draft.registryFile)}</span>
         <span class="pfad-aktionen">
-          <button type="button" class="knopf symbol leise" data-aktion="oeffnen" data-pfad="${h(draft.registryFile)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">↗</button>
+          <button type="button" class="knopf symbol leise" data-aktion="pfad-oeffnen" data-pfad="${h(draft.registryFile)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">↗</button>
         </span>
       </span>`
     : ''
+
+  const rootsHtml = rootAnzahl
+    ? draft.roots
+        .map(
+          (pfad, i) => `<div class="einst-root">
+                  <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
+                  <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="${h(pfad)} entfernen" ${rootAnzahl <= 1 ? 'disabled' : ''}>×</button>
+                </div>`
+        )
+        .join('')
+    : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
 
   ziel.innerHTML = `
     ${seitenKopfHtml({
@@ -361,57 +420,44 @@ function rendereEinstellungen() {
     })}
 
     <form class="einst-form" id="einst-form" novalidate>
-      <section class="einst-block" aria-labelledby="einst-darstellung">
-        <header class="einst-block-kopf">
-          <h3 id="einst-darstellung">Darstellung</h3>
-          <p>Sofort wirksam, ohne Speichern.</p>
-        </header>
-        <div class="einst-zeile">
+      ${einstSektionHtml({
+        id: 'oberflaeche',
+        titel: 'Oberfläche',
+        meta: theme === 'light' ? 'Hell' : 'Dunkel',
+        offen: offen.oberflaeche,
+        koerper: `<div class="einst-zeile">
           <div class="einst-zeile-text">
-            <strong>Farbschema</strong>
-            <span>Helle oder dunkle Oberfläche — nur in diesem Browser.</span>
+            <span class="einst-zeile-name">Farbschema</span>
+            <span class="einst-zeile-hilfe">Nur in diesem Browser, ohne Speichern.</span>
           </div>
           <div class="einst-segment" role="group" aria-label="Farbschema">
             <button type="button" class="einst-segment-knopf${theme === 'dark' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="dark" aria-pressed="${theme === 'dark'}">${THEME_ICON.dark}<span>Dunkel</span></button>
             <button type="button" class="einst-segment-knopf${theme === 'light' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="light" aria-pressed="${theme === 'light'}">${THEME_ICON.light}<span>Hell</span></button>
           </div>
-        </div>
-      </section>
+        </div>`
+      })}
 
-      <section class="einst-block" aria-labelledby="einst-projekte">
-        <header class="einst-block-kopf">
-          <h3 id="einst-projekte">Projekt-Wurzeln</h3>
-          <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
-        </header>
-        <div class="einst-feld">
-          <div class="einst-roots" id="einst-roots">
-            ${
-              rootAnzahl
-                ? draft.roots
-                    .map(
-                      (pfad, i) => `<div class="einst-root">
-                  <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
-                  <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="${h(pfad)} entfernen" ${rootAnzahl <= 1 ? 'disabled' : ''}>×</button>
-                </div>`
-                    )
-                    .join('')
-                : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
-            }
-          </div>
+      ${einstSektionHtml({
+        id: 'projekte',
+        titel: 'Projekt-Wurzeln',
+        meta: rootAnzahl === 1 ? '1 Ordner' : `${rootAnzahl} Ordner`,
+        offen: offen.projekte,
+        koerper: `<div class="einst-feld">
+          <div class="einst-roots" id="einst-roots">${rootsHtml}</div>
           <div class="einst-root-neu">
             <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder absoluter Pfad" autocomplete="off" spellcheck="false" aria-label="Neues Wurzelverzeichnis">
             <button type="button" class="knopf" data-einst="root-dazu">Hinzufügen</button>
           </div>
           <span class="einst-hilfe"><kbd>↵</kbd> im Feld fügt den Pfad hinzu. Mindestens eine Wurzel bleibt nötig.</span>
-        </div>
-      </section>
+        </div>`
+      })}
 
-      <section class="einst-block" aria-labelledby="einst-hub">
-        <header class="einst-block-kopf">
-          <h3 id="einst-hub">Hub &amp; Adressen</h3>
-          <p>Port der Übersicht und Domain für Projekt-URLs.</p>
-        </header>
-        <div class="einst-raster">
+      ${einstSektionHtml({
+        id: 'hub',
+        titel: 'Hub &amp; Netzwerk',
+        meta: `Port ${h(draft.hubPort)}`,
+        offen: offen.hub,
+        koerper: `<div class="einst-raster">
           <label class="einst-feld">
             <span class="einst-label">Hub-Port</span>
             <input type="number" name="hubPort" class="einst-input mono" min="1024" max="65535" step="1" value="${h(draft.hubPort)}" required>
@@ -423,15 +469,15 @@ function rendereEinstellungen() {
             <span class="einst-hilfe">Projekte: <span class="mono">name.${h(draft.domainSuffix)}:…</span></span>
           </label>
         </div>
-        ${portHinweis}
-      </section>
+        ${portHinweis}`
+      })}
 
-      <section class="einst-block" aria-labelledby="einst-werkzeuge">
-        <header class="einst-block-kopf">
-          <h3 id="einst-werkzeuge">Werkzeuge</h3>
-          <p>Editor und Wartezeit beim Starten.</p>
-        </header>
-        <div class="einst-raster">
+      ${einstSektionHtml({
+        id: 'werkzeuge',
+        titel: 'Werkzeuge',
+        meta: h(draft.editor || 'Editor'),
+        offen: offen.werkzeuge,
+        koerper: `<div class="einst-raster">
           <label class="einst-feld">
             <span class="einst-label">Editor-Kommando</span>
             <input type="text" name="editor" class="einst-input mono" list="einst-editor-vorschlaege" value="${h(draft.editor)}" required autocomplete="off" spellcheck="false">
@@ -451,23 +497,23 @@ function rendereEinstellungen() {
             </div>
             <span class="einst-hilfe" id="einst-timeout-hilfe">Maximale Wartezeit, bis der Server-Port antwortet.</span>
           </label>
-        </div>
-      </section>
+        </div>`
+      })}
 
-      <section class="einst-block" aria-labelledby="einst-agenten">
-        <header class="einst-block-kopf">
-          <h3 id="einst-agenten">Agenten</h3>
-          <p>Was die Detailansicht unter Agent-Kontext zeigt.</p>
-        </header>
-        <label class="einst-schalter">
+      ${einstSektionHtml({
+        id: 'agenten',
+        titel: 'Agenten',
+        meta: draft.showGlobalAgentContext ? 'Global an' : 'Nur Projekt',
+        offen: offen.agenten,
+        koerper: `<label class="einst-schalter">
           <span class="einst-schalter-text">
-            <strong>Globale Agent-Dateien zeigen</strong>
-            <span>Zusätzlich CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis.</span>
+            <span class="einst-zeile-name">Globale Agent-Dateien zeigen</span>
+            <span class="einst-zeile-hilfe">Zusätzlich CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis.</span>
           </span>
           <input type="checkbox" name="showGlobalAgentContext" ${draft.showGlobalAgentContext ? 'checked' : ''}>
           <span class="einst-schalter-ui" aria-hidden="true"></span>
-        </label>
-      </section>
+        </label>`
+      })}
 
       <div class="einst-dock">
         <div class="einst-leiste${dirty ? ' dirty' : ''}">
@@ -490,25 +536,46 @@ function rendereEinstellungen() {
       </div>
     </form>
   `
-  planeEinstDockScrim()
+  bindeEinstDockScrim()
 }
 
 /** Fade nur solange Inhalt unter dem sticky Dock durchscrollt. */
 function syncEinstDockScrim() {
   const dock = document.querySelector('.einst-dock')
-  const letzteKarte = document.querySelector('.einst-block:last-of-type')
+  const letzteKarte = document.querySelector('.einst-form > .einst-sektion:last-of-type')
   if (!dock || !letzteKarte || zustand.ansicht !== 'einstellungen') return
   const ueberlappt = letzteKarte.getBoundingClientRect().bottom > dock.getBoundingClientRect().top + 1
   dock.classList.toggle('am-ende', !ueberlappt)
 }
 
 let einstDockScrimRaf = 0
+/** Nach <details>-Toggle ist die Höhe oft erst im übernächsten Frame final. */
 function planeEinstDockScrim() {
   if (einstDockScrimRaf) return
   einstDockScrimRaf = requestAnimationFrame(() => {
-    einstDockScrimRaf = 0
     syncEinstDockScrim()
+    requestAnimationFrame(() => {
+      einstDockScrimRaf = 0
+      syncEinstDockScrim()
+    })
   })
+}
+
+let einstFormResizeBeobachter = null
+function bindeEinstDockScrim() {
+  const form = document.querySelector('#einst-form')
+  if (!form) return
+  if (typeof ResizeObserver === 'function') {
+    if (!einstFormResizeBeobachter) {
+      einstFormResizeBeobachter = new ResizeObserver(() => planeEinstDockScrim())
+    }
+    einstFormResizeBeobachter.disconnect()
+    einstFormResizeBeobachter.observe(form)
+    for (const sektion of form.querySelectorAll('.einst-sektion')) {
+      einstFormResizeBeobachter.observe(sektion)
+    }
+  }
+  planeEinstDockScrim()
 }
 
 function einstellungenAusForm(form) {
@@ -554,6 +621,14 @@ function syncEinstellungenDraftAusForm() {
   if (suffixHilfe) {
     const suffix = h(String(form.domainSuffix.value || 'localhost').trim() || 'localhost')
     suffixHilfe.innerHTML = `Projekte: <span class="mono">name.${suffix}:…</span>`
+  }
+  const hubMeta = form.querySelector('[data-einst-sektion="hub"] .einst-sektion-meta')
+  if (hubMeta) hubMeta.textContent = `Port ${form.hubPort?.value || '—'}`
+  const werkMeta = form.querySelector('[data-einst-sektion="werkzeuge"] .einst-sektion-meta')
+  if (werkMeta) werkMeta.textContent = String(form.editor?.value || 'Editor').trim() || 'Editor'
+  const agentMeta = form.querySelector('[data-einst-sektion="agenten"] .einst-sektion-meta')
+  if (agentMeta) {
+    agentMeta.textContent = form.showGlobalAgentContext?.checked ? 'Global an' : 'Nur Projekt'
   }
 }
 
@@ -3131,6 +3206,15 @@ document.addEventListener('input', (ereignis) => {
 document.addEventListener('change', (ereignis) => {
   if (ereignis.target.id === 'folgen') zustand.log.folgen = ereignis.target.checked
   if (ereignis.target.closest?.('#einst-form')) syncEinstellungenDraftAusForm()
+})
+
+document.addEventListener('toggle', (ereignis) => {
+  const sektion = ereignis.target
+  if (!(sektion instanceof HTMLDetailsElement)) return
+  if (!sektion.matches('[data-einst-sektion]')) return
+  if (!$('#einstellungen')?.contains(sektion)) return
+  setzeEinstSektion(sektion.dataset.einstSektion, sektion.open)
+  planeEinstDockScrim()
 })
 
 $('#befehl-eingabe')?.addEventListener('input', (ereignis) => {

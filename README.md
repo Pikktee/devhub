@@ -107,10 +107,11 @@ zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
 | --- | --- | --- |
 | Übersicht | `/` | Projekte starten/stoppen, öffnen, Logs |
 | Verlauf | `/verlauf` | Letzte Aktionen |
-| Einstellungen | `/einstellungen` | Wurzeln, Hub-Port, Domain, Editor, Agent-Anzeige |
+| Einstellungen | `/einstellungen` | Wurzeln, Hub-Port, Domain, Editor, Agent-Anzeige (einklappbare Abschnitte) |
 
 - **Befehlspalette:** `⌘K` — Navigation, Projekte und Aktionen (auch Theme umschalten).
 - **Hell-/Dunkelmodus:** in den Einstellungen oder über die Palette; Speicherung im Browser (`localStorage`), nicht in der Registry.
+- **Design Tokens:** [`DESIGN.md`](DESIGN.md) und [`ui/styles/tokens.css`](ui/styles/tokens.css) — gemeinsame Farben, Radien, Typo.
 - **Einstellungen speichern:** Formular unten oder `⌘S`. Port-Änderungen brauchen danach `devhub service install`, damit launchd den neuen Hub-Port lädt.
 
 ---

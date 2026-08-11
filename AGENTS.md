@@ -8,6 +8,9 @@ Dev-Server.
 - **Keine Laufzeitabhängigkeiten.** Node-Standardbibliothek, sonst nichts. Wer
   hier ein Paket hinzufügt, macht das Werkzeug abhängig von genau der Sorte
   Zustand, die es aufräumen soll.
+- **UI-Tokens:** [`DESIGN.md`](DESIGN.md) und [`ui/styles/tokens.css`](ui/styles/tokens.css)
+  sind die Quelle für Farben, Radien und Typo. Keine neuen Hex-Werte in
+  `ui/style.css` oder `ui/app.js`.
 - **Bezeichner im Code englisch, Ausgabe an den Menschen deutsch.** CLI-Texte,
   Fehlermeldungen, Kommentare und die Oberfläche sind deutsch.
 - **Zustand kommt aus der Messung, nicht aus einer Datei.** Ob etwas läuft,

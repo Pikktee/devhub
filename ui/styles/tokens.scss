@@ -1,0 +1,10 @@
+/*!
+ * SCSS-Einstieg für die gemeinsamen Design Tokens.
+ * Kanonische Werte: tokens.css · Semantik: ../../DESIGN.md
+ *
+ * Nutzung in SCSS-Pipelines:
+ *   @import 'ui/styles/tokens';
+ * Ohne Sass-Build (Standard im Repo): style.css importiert tokens.css direkt.
+ */
+
+@import url('./tokens.css');

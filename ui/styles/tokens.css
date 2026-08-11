@@ -1,0 +1,120 @@
+/*
+ * Design Tokens — gemeinsame Quelle für die Oberfläche.
+ * Semantik und Regeln: ../../DESIGN.md
+ * Nicht lokal überschreiben; Varianten nur über [data-theme].
+ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Flächen */
+  --bg: #0a0e14;
+  --bg-kuppel: #101722;
+  --bg-tief: #06090e;
+  --flaeche: #121820;
+  --flaeche-hoch: #1a2330;
+  --flaeche-hover: #212b3a;
+
+  /* Linien */
+  --rand: #2a3648;
+  --rand-stark: #3d4d63;
+
+  /* Text */
+  --text: #eef2f7;
+  --text-leise: #a8b4c7;
+  --text-still: #7a879c;
+
+  /* Status */
+  --gruen: #3dba7a;
+  --gruen-leise: color-mix(in srgb, var(--gruen) 18%, transparent);
+  --gelb: #d4a017;
+  --gelb-leise: color-mix(in srgb, var(--gelb) 14%, transparent);
+  --rot: #e06c75;
+  --rot-leise: color-mix(in srgb, var(--rot) 14%, transparent);
+  --blau: #6eb0e0;
+
+  /* Akzent */
+  --akzent: #3d7ab5;
+  --akzent-hell: #5b9fd4;
+  --akzent-text: #d6e8f7;
+  --akzent-wash: 22%;
+  --gruen-wash: 12%;
+
+  /* Atmosphäre & Form */
+  --korn: 0.045;
+  --schatten: 0 18px 40px -18px color-mix(in srgb, #02060c 78%, transparent);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fokus: 0 0 0 2px var(--bg), 0 0 0 4px var(--akzent-hell);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #eef1f5;
+  --bg-kuppel: #e4eaf2;
+  --bg-tief: #e2e7ee;
+  --flaeche: #ffffff;
+  --flaeche-hoch: #f4f6f9;
+  --flaeche-hover: #ebf0f6;
+
+  --rand: #d0d7e2;
+  --rand-stark: #b4bfcf;
+
+  --text: #121820;
+  --text-leise: #445266;
+  --text-still: #6b788c;
+
+  --gruen: #1a7a4c;
+  --gelb: #9a5b08;
+  --rot: #c03948;
+  --blau: #1a6fa5;
+
+  --akzent: #21649a;
+  --akzent-hell: #2a78b8;
+  --akzent-text: #ffffff;
+  --akzent-wash: 14%;
+  --gruen-wash: 8%;
+
+  --korn: 0.02;
+  --schatten: 0 14px 32px -14px color-mix(in srgb, #1a2a40 22%, transparent);
+}
+
+/* Ohne gesetztes data-theme: Systemvorgabe (nur bis das Inline-Script greift). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+
+    --bg: #eef1f5;
+    --bg-kuppel: #e4eaf2;
+    --bg-tief: #e2e7ee;
+    --flaeche: #ffffff;
+    --flaeche-hoch: #f4f6f9;
+    --flaeche-hover: #ebf0f6;
+
+    --rand: #d0d7e2;
+    --rand-stark: #b4bfcf;
+
+    --text: #121820;
+    --text-leise: #445266;
+    --text-still: #6b788c;
+
+    --gruen: #1a7a4c;
+    --gelb: #9a5b08;
+    --rot: #c03948;
+    --blau: #1a6fa5;
+
+    --akzent: #21649a;
+    --akzent-hell: #2a78b8;
+    --akzent-text: #ffffff;
+    --akzent-wash: 14%;
+    --gruen-wash: 8%;
+
+    --korn: 0.02;
+    --schatten: 0 14px 32px -14px color-mix(in srgb, #1a2a40 22%, transparent);
+  }
+}
