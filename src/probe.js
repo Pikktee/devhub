@@ -21,7 +21,7 @@ function probeHost(port, host, timeout) {
 
 /** Belegt heißt: jemand nimmt eine TCP-Verbindung an. Eine PID-Datei zu einem
  *  toten Prozess ist die häufigste Lüge in solchen Werkzeugen.
- *  Vite (und andere) lauschen auf macOS oft nur auf ::1 — 127.0.0.1 allein
+ *  Vite (und andere) lauschen auf macOS oft nur auf ::1 - 127.0.0.1 allein
  *  würde sie als „frei“ und „nicht bereit“ missverstehen. */
 export async function probePort(port, { hosts = ['127.0.0.1', '::1'], timeout = 400 } = {}) {
   const list = Array.isArray(hosts) ? hosts : [hosts]
@@ -34,7 +34,7 @@ async function lsof(args) {
     const { stdout } = await run('lsof', args, { timeout: 5000 })
     return stdout
   } catch (err) {
-    // lsof beendet sich mit 1, wenn nichts passt — das ist kein Fehler.
+    // lsof beendet sich mit 1, wenn nichts passt - das ist kein Fehler.
     return err.stdout ?? ''
   }
 }
@@ -57,7 +57,7 @@ export async function listenerOn(port) {
 }
 
 /**
- * `lsof -g` liefert auf macOS nichts Verlässliches — die Mitglieder der Gruppe
+ * `lsof -g` liefert auf macOS nichts Verlässliches - die Mitglieder der Gruppe
  * kommen darum aus `ps`, und erst danach wird nach offenen Ports gefragt.
  */
 export async function groupMembers(pgid) {
@@ -74,7 +74,7 @@ export async function groupMembers(pgid) {
 }
 
 /** Nach dem Start: lauscht die Prozessgruppe wirklich auf der zugewiesenen
- *  Nummer — oder ist Next.js still ausgewichen? */
+ *  Nummer - oder ist Next.js still ausgewichen? */
 export async function listeningPortsOfGroup(pgid) {
   const members = await groupMembers(pgid)
   if (!members.length) return []

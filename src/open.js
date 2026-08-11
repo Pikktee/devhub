@@ -18,7 +18,7 @@ function underRoot(target, root) {
   return target === base || target.startsWith(`${base}${sep}`)
 }
 
-/** Nur Pfade, die der Hub ohnehin kennt — kein freier Dateizugriff. */
+/** Nur Pfade, die der Hub ohnehin kennt - kein freier Dateizugriff. */
 export function assertOpenablePath(registry, requested) {
   if (!requested || typeof requested !== 'string') {
     throw Object.assign(new Error('Pfad fehlt'), { status: 400 })

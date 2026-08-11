@@ -15,11 +15,11 @@ function requireInstance(registry, name, profile) {
   const project = describeProject(registry, name)
   if (!project) throw new Error(`Projekt "${name}" ist unbekannt`)
   if (!project.adopted) {
-    throw new Error(`"${name}" ist nicht aufgenommen — "devhub adopt ${name}" vergibt einen Slot`)
+    throw new Error(`"${name}" ist nicht aufgenommen - "devhub adopt ${name}" vergibt einen Slot`)
   }
   const slot = profile === 'default' ? project.slot : project.profileSlots[profile]
   if (slot === undefined) {
-    throw new Error(`Profil "${profile}" von ${name} hat keinen Slot — "devhub adopt ${name} --profil ${profile}"`)
+    throw new Error(`Profil "${profile}" von ${name} hat keinen Slot - "devhub adopt ${name} --profil ${profile}"`)
   }
   const specs = project.profiles[profile]
   if (!specs?.length) {
@@ -74,7 +74,7 @@ export function tailLog(file, lines = 12) {
   }
 }
 
-/** Backend vor Frontend starten — Login braucht die API, sobald die UI offen ist. */
+/** Backend vor Frontend starten - Login braucht die API, sobald die UI offen ist. */
 function startOrder(specs) {
   const rank = (role) => (role === 'backend' ? 0 : role === 'frontend' ? 1 : 2)
   return [...specs].sort((a, b) => rank(a.role) - rank(b.role))
@@ -101,7 +101,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
       const listener = await listenerOn(spec.port)
       throw new Error(
         `Port ${spec.port} (${name}/${spec.name}) ist belegt von ${listener?.command ?? 'unbekannt'}` +
-          `${listener?.pid ? ` (PID ${listener.pid})` : ''} — der Hub startet nichts auf einer fremden Nummer`
+          `${listener?.pid ? ` (PID ${listener.pid})` : ''} - der Hub startet nichts auf einer fremden Nummer`
       )
     }
 
@@ -111,7 +111,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     const vars = varsFor({ project, profile, spec, port: spec.port, registry, slot })
 
     if (spec.runner === 'compose') {
-      if (!(await dockerAvailable())) throw new Error('Docker antwortet nicht — Docker Desktop starten')
+      if (!(await dockerAvailable())) throw new Error('Docker antwortet nicht - Docker Desktop starten')
       await composeUp({ cwd, file: spec.composeFile, port: spec.port, logFile, env: spec.env })
       started.push({ name: spec.name, role: spec.role, port: spec.port, runner: 'compose', cwd, logFile, url: spec.url })
       continue
@@ -146,7 +146,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     const fd = openLog(proc.logFile)
 
     if (result.ready) {
-      logLine(fd, `✓ lauscht auf ${proc.port} — wie zugewiesen`)
+      logLine(fd, `✓ lauscht auf ${proc.port} - wie zugewiesen`)
       logLine(fd, `erreichbar unter ${proc.url}`)
       proc.ready = true
       continue
@@ -154,25 +154,25 @@ export async function up(name, { profile = 'default', registry = registryStore.l
 
     proc.ready = false
     // Next.js kann das Ausweichen nicht abschalten. Wenn die Gruppe auf einer
-    // anderen Nummer lauscht, ist genau das passiert — und ein zweiter Server
+    // anderen Nummer lauscht, ist genau das passiert - und ein zweiter Server
     // wäre die Folge, die dieses Werkzeug verhindern soll.
     const listening = proc.pgid ? await listeningPortsOfGroup(proc.pgid) : []
     if (listening.includes(proc.port)) {
       // Probe hat den Port verfehlt (z. B. nur ::1), der Prozess lauscht aber richtig.
-      logLine(fd, `✓ lauscht auf ${proc.port} — wie zugewiesen`)
+      logLine(fd, `✓ lauscht auf ${proc.port} - wie zugewiesen`)
       logLine(fd, `erreichbar unter ${proc.url}`)
       proc.ready = true
       continue
     }
     const drifted = listening.filter((p) => p !== proc.port)
     if (drifted.length) {
-      logLine(fd, `! auf ${drifted.join(', ')} ausgewichen statt ${proc.port} — gestoppt`)
+      logLine(fd, `! auf ${drifted.join(', ')} ausgewichen statt ${proc.port} - gestoppt`)
       await stopGroup(proc.pgid)
       warnings.push(
-        `${name}/${proc.name} ist auf ${drifted.join(', ')} ausgewichen statt ${proc.port} — Startkommando in devhub.json fixieren`
+        `${name}/${proc.name} ist auf ${drifted.join(', ')} ausgewichen statt ${proc.port} - Startkommando in devhub.json fixieren`
       )
     } else {
-      logLine(fd, `! nicht bereit (${result.reason}) — siehe Log`)
+      logLine(fd, `! nicht bereit (${result.reason}) - siehe Log`)
       warnings.push(
         `${name}/${proc.name} wurde nicht bereit (${result.reason}). Letzte Zeilen:\n  ${tailLog(proc.logFile, 6).join('\n  ')}`
       )

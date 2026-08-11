@@ -5,7 +5,7 @@ import { home } from './paths.js'
 /**
  * Unter launchd erbt ein Job ein minimales PATH ohne Homebrew und ohne den
  * Node, mit dem der Hub selbst läuft. Ein `npm run dev` scheitert dann mit
- * "command not found" — und zwar erst im Log, wo es niemand sieht.
+ * "command not found" - und zwar erst im Log, wo es niemand sieht.
  */
 export function childPath(basePath = process.env.PATH ?? '') {
   const candidates = [

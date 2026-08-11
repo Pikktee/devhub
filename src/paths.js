@@ -6,7 +6,7 @@ const home = homedir()
 
 /**
  * Eine zweite Instanz (Entwicklung an der Oberfläche) darf die PID-Dateien der
- * echten Server nicht anfassen — sonst hält man beim Testen fremde Prozesse für
+ * echten Server nicht anfassen - sonst hält man beim Testen fremde Prozesse für
  * die eigenen. Die Registry bleibt geteilt, damit die Portvergabe eine einzige
  * Wahrheit behält.
  */

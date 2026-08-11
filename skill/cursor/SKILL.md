@@ -3,11 +3,11 @@ name: devhub
 description: >-
   Verwaltet lokale Dev-Server über das CLI `devhub`. Verwenden, wenn eine
   App gestartet, gestoppt, im Browser geöffnet oder der Dev-Server-Status
-  geprüft werden soll — oder bevor npm/pnpm/vite/next/uvicorn o. Ä. ausgeführt
+  geprüft werden soll - oder bevor npm/pnpm/vite/next/uvicorn o. Ä. ausgeführt
   würde. Kurzform `dev` ist Alias.
 ---
 
-# Devhub — Dev-Server
+# Devhub - Dev-Server
 
 ## Pflicht
 
@@ -19,13 +19,13 @@ Verboten: `npm run dev`, `pnpm dev`, `yarn dev`, `bun dev`, `vite`, `next dev`,
 ## Ablauf
 
 1. Projektordner unter der Hub-Wurzel kennen (meist `~/Dev`, z. B. `journey`,
-   `schnappster`) — das ist der CLI-Name, nicht der Anzeigename (Maptale,
+   `schnappster`) - das ist der CLI-Name, nicht der Anzeigename (Maptale,
    Schnappster).
-2. `devhub status` bzw. `devhub status <ordner>` — läuft schon etwas? Welche URL?
+2. `devhub status` bzw. `devhub status <ordner>` - läuft schon etwas? Welche URL?
    Bei einem Projekt erscheinen unter **Prozesse** die echten URLs (Frontend =
    Anzeige-Host, Backend = meist `http://127.0.0.1:<port>`). Nie
    `http://<anzeigename>.localhost:<backend-port>` erfinden.
-3. Wenn nötig: `devhub up <ordner>` — startet alle Rollen (Frontend und API).
+3. Wenn nötig: `devhub up <ordner>` - startet alle Rollen (Frontend und API).
 4. Nutzer-URL = Frontend-Zeile aus dem Status (z. B. `http://maptale.localhost:5120`).
 5. Bei Startfehlern: `devhub logs <ordner>` lesen, nicht parallel selbst starten.
 6. Stoppen: `devhub down <ordner>` (ganze Prozessgruppe).

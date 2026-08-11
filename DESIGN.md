@@ -1,10 +1,10 @@
-# Design System — devhub
+# Design System - devhub
 
 Single Source of Truth für die Oberfläche. Code-Tokens liegen in
 [`ui/styles/tokens.css`](ui/styles/tokens.css). SCSS-Tooling re-exportiert
 dieselbe Datei über [`ui/styles/tokens.scss`](ui/styles/tokens.scss).
 Komponentenstile bleiben in [`ui/style.css`](ui/style.css) und importieren
-die Tokens — keine Hex-Werte dort neu erfinden.
+die Tokens - keine Hex-Werte dort neu erfinden.
 
 ## Atmosphäre
 
@@ -46,7 +46,7 @@ Umschalten speichert in `localStorage` (`devhub-theme`), nicht in der Registry.
 
 Regel: Interaktive Elemente im Hover/Focus bekommen `--text` **und** einen
 sichtbaren Flächenwechsel (`--flaeche-hover` / `--flaeche-hoch`). Nur die
-Textfarbe zu ändern reicht nicht — sonst kippt der Kontrast.
+Textfarbe zu ändern reicht nicht - sonst kippt der Kontrast.
 
 ### Linien & Fokus
 
@@ -101,10 +101,10 @@ und in `tokens.css`.
 
 ## Hierarchie in Einstellungen
 
-1. **Abschnitt** (`.einst-sektion-titel`) — 15px, Gewicht 650, `--text`
-2. **Abschnitts-Meta** (`.einst-sektion-meta`) — 12px, `--text-still`, zeigt Ist-Wert
-3. **Einstellungsname** (`.einst-zeile-name`) — 13px, `--text-leise`
-4. **Hilfe** (`.einst-zeile-hilfe`) — 12.5px, `--text-still`
+1. **Abschnitt** (`.einst-sektion-titel`) - 15px, Gewicht 650, `--text`
+2. **Abschnitts-Meta** (`.einst-sektion-meta`) - 12px, `--text-still`, zeigt Ist-Wert
+3. **Einstellungsname** (`.einst-zeile-name`) - 13px, `--text-leise`
+4. **Hilfe** (`.einst-zeile-hilfe`) - 12.5px, `--text-still`
 
 Abschnittstitel und Einstellungstitel dürfen optisch nicht gleich schwer sein.
 
@@ -120,5 +120,5 @@ ui/app.js                 ← Verhalten, keine Farben hardcoden
 
 Neue Farbe oder Radius: zuerst hier und in `tokens.css`, dann verwenden.
 Keine magischen Hex-Werte in Komponentenregeln, außer unvermeidbare
-Einmalfälle (z. B. reines Weiß auf Akzent-Thumb oder Gefahr-Knopf) — die
+Einmalfälle (z. B. reines Weiß auf Akzent-Thumb oder Gefahr-Knopf) - die
 gehören kommentiert.

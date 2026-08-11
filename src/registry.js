@@ -37,7 +37,7 @@ export function publicSettings(settings = {}) {
 
 /**
  * Wendet einen Settings-Patch an (ohne zu speichern).
- * Unbekannte Schlüssel werden ignoriert — die Registry bleibt vorwärtskompatibel.
+ * Unbekannte Schlüssel werden ignoriert - die Registry bleibt vorwärtskompatibel.
  */
 export function applySettingsPatch(registry, patch = {}) {
   if (!patch || typeof patch !== 'object') {
@@ -103,7 +103,7 @@ export function applySettingsPatch(registry, patch = {}) {
   }
 
   if (next.hubPort !== vorherPort) {
-    warnings.push('Hub-Port geändert — danach `devhub service install`, damit launchd den neuen Port lädt.')
+    warnings.push('Hub-Port geändert - danach `devhub service install`, damit launchd den neuen Port lädt.')
   }
 
   registry.settings = next
@@ -166,7 +166,7 @@ export function nextFreeSlot(registry) {
   for (let slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
     if (!used.has(slot)) return slot
   }
-  throw new Error('Keine freien Slots mehr — alle Nummern von 10 bis 99 sind vergeben')
+  throw new Error('Keine freien Slots mehr - alle Nummern von 10 bis 99 sind vergeben')
 }
 
 export function addProject(registry, { name, path, slot, displayName }) {

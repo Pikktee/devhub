@@ -16,11 +16,11 @@ function schreibeLog(inhalt) {
 }
 
 test('readHubLogTail verdichtet identischen Spam und behält ältere Ereignisse', () => {
-  const spam = 'Fehler: Port 4000 ist belegt — läuft der Hub schon?\n'
+  const spam = 'Fehler: Port 4000 ist belegt - läuft der Hub schon?\n'
   const sinnvoll = [
     '11:00:00 devhub  Übersicht auf http://devhub.localhost:4000',
-    '11:01:00 devhub  sync demo — 2 Dateien geändert',
-    '11:02:00 devhub  settings hub — Einstellungen gespeichert'
+    '11:01:00 devhub  sync demo - 2 Dateien geändert',
+    '11:02:00 devhub  settings hub - Einstellungen gespeichert'
   ]
   schreibeLog(`${sinnvoll.join('\n')}\n${spam.repeat(500)}`)
 
@@ -47,6 +47,6 @@ test('recordEvent hängt lesbare Zeilen an', () => {
   recordEvent({ type: 'adopt', project: 'demo', summary: 'Slot 3', lines: ['web → :5103'] })
   const daten = readHubLogTail(20)
   assert.equal(daten.lines.length, 2)
-  assert.match(daten.lines[0], /adopt demo — Slot 3/)
+  assert.match(daten.lines[0], /adopt demo - Slot 3/)
   assert.match(daten.lines[1], /web → :5103/)
 })

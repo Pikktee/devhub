@@ -16,7 +16,7 @@ const { probePort } = await import('../src/probe.js')
 const { portFor } = await import('../src/ports.js')
 const { describeProject } = await import('../src/discovery.js')
 
-/** Ein Slot, dessen beide Ports (und die Ausweichnummer) gerade frei sind —
+/** Ein Slot, dessen beide Ports (und die Ausweichnummer) gerade frei sind -
  *  sonst scheitert der Test an einem fremden Server statt am Code. */
 async function freierSlot(registry) {
   for (let slot = 99; slot >= 10; slot--) {
@@ -58,7 +58,7 @@ test('startet abgekoppelt, ist idempotent und stoppt die ganze Gruppe', async (t
 
   const beendet = await supervisor.down('brav', { registry: registryStore.load() })
   assert.ok(beendet.ok, beendet.warnings.join(' '))
-  assert.equal(await probePort(portFor(slot, 'frontend')), false, 'der Port ist wirklich frei — kein überlebendes Kind')
+  assert.equal(await probePort(portFor(slot, 'frontend')), false, 'der Port ist wirklich frei - kein überlebendes Kind')
 })
 
 test('erkennt, wenn ein Server auf eine andere Nummer ausweicht', async (t) => {

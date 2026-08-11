@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync, rmSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 
-/** Regenerierbare Artefakte — Quellcode und Lockfiles bleiben. */
+/** Regenerierbare Artefakte - Quellcode und Lockfiles bleiben. */
 export const ARTIFACT_NAMES = [
   'node_modules',
   '.next',

@@ -1,11 +1,11 @@
 # devhub
 
-**Ein lokaler Hub für alle deine Dev-Server — damit Coding-Agenten und du denselben Server treffen.**
+**Ein lokaler Hub für alle deine Dev-Server - damit Coding-Agenten und du denselben Server treffen.**
 
 Wenn Cursor, Claude Code oder Codex jeweils `npm run dev` starten, entstehen schnell
 zwei Server auf zwei Ports. Logins und Daten „fehlen“, obwohl „alles läuft“.
 devhub gibt jedem Projekt **eine feste Adresse** und einen **Dienst unter launchd**,
-der die Server überlebt — unabhängig von IDE, Agent-Sitzung oder Terminal.
+der die Server überlebt - unabhängig von IDE, Agent-Sitzung oder Terminal.
 
 Übersicht im Browser: [http://devhub.localhost:4000](http://devhub.localhost:4000)
 
@@ -66,7 +66,7 @@ devhub status mein-projekt
 open http://devhub.localhost:4000
 ```
 
-`dev` ist nur die Kurzform von `devhub` — inhaltlich dasselbe.
+`dev` ist nur die Kurzform von `devhub` - inhaltlich dasselbe.
 
 ### Projektwurzel wählen
 
@@ -77,7 +77,7 @@ open http://devhub.localhost:4000
 | `devhub setup --wurzel ~/Code,~/Work` | Mehrere Wurzeln. |
 
 Ohne interaktives Terminal (z. B. Skript) und ohne vorhandenes `~/Dev` bricht
-Setup ab und verlangt `--wurzel` — es wird nichts stillschweigend angelegt.
+Setup ab und verlangt `--wurzel` - es wird nichts stillschweigend angelegt.
 
 ---
 
@@ -93,7 +93,7 @@ devhub open journey           # Frontend im Browser
 
 Der **CLI-Name** ist der Ordner unter der Wurzel (`journey`).
 Die **URL** folgt dem Anzeigenamen (`http://maptale.localhost:5120`).
-Bei `devhub status <ordner>` stehen Frontend- und Backend-URLs unter Prozesse —
+Bei `devhub status <ordner>` stehen Frontend- und Backend-URLs unter Prozesse -
 Backends meist als `http://127.0.0.1:…`.
 
 ---
@@ -109,9 +109,9 @@ zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
 | Verlauf | `/verlauf` | Letzte Aktionen |
 | Einstellungen | `/einstellungen` | Wurzeln, Hub-Port, Domain, Editor, Agent-Anzeige (einklappbare Abschnitte) |
 
-- **Befehlspalette:** `⌘K` — Navigation, Projekte und Aktionen (auch Theme umschalten).
+- **Befehlspalette:** `⌘K` - Navigation, Projekte und Aktionen (auch Theme umschalten).
 - **Hell-/Dunkelmodus:** in den Einstellungen oder über die Palette; Speicherung im Browser (`localStorage`), nicht in der Registry.
-- **Design Tokens:** [`DESIGN.md`](DESIGN.md) und [`ui/styles/tokens.css`](ui/styles/tokens.css) — gemeinsame Farben, Radien, Typo.
+- **Design Tokens:** [`DESIGN.md`](DESIGN.md) und [`ui/styles/tokens.css`](ui/styles/tokens.css) - gemeinsame Farben, Radien, Typo.
 - **Einstellungen speichern:** Formular unten oder `⌘S`. Port-Änderungen brauchen danach `devhub service install`, damit launchd den neuen Hub-Port lädt.
 
 ---
@@ -147,7 +147,7 @@ Ohne Projektnamen gilt das Verzeichnis, in dem du stehst.
 ## Ports und Adressen
 
 Jedes aufgenommene Projekt bekommt einen **Slot** (10–99). Der Slot wird
-**nie wiederverwendet** — alte Bookmarks zeigen nicht plötzlich auf ein fremdes Projekt.
+**nie wiederverwendet** - alte Bookmarks zeigen nicht plötzlich auf ein fremdes Projekt.
 
 | Rolle | Formel | Beispiel Slot 20 |
 | --- | --- | --- |
@@ -159,7 +159,7 @@ Zweites Profil (z. B. smoke): `http://<name>-smoke.localhost:<port>`
 
 macOS löst `*.localhost` ohne `/etc/hosts` und ohne Root auf. Der Port bleibt in
 der URL, damit HMR (Vite u. a.) funktioniert. Getrennte Hostnamen bedeuten auch
-getrennte Cookies — zwei Instanzen desselben Projekts überschreiben sich nicht
+getrennte Cookies - zwei Instanzen desselben Projekts überschreiben sich nicht
 mehr die Anmeldung.
 
 ---
@@ -232,7 +232,7 @@ Platzhalter: `{port}`, `{host}`, `{url}`, `{project}`, `{profile}`, `{path}`
 (deutsche Schlüsselnamen werden ebenso akzeptiert.)
 
 Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)
-wird ohne `devhub.json` abgeleitet — bei vorhandenem `.venv` mit dessen Interpreter.
+wird ohne `devhub.json` abgeleitet - bei vorhandenem `.venv` mit dessen Interpreter.
 Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 
 ```json
@@ -253,7 +253,7 @@ Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 
 ## Was der Hub durchsetzt
 
-- Server starten **abgekoppelt** (eigene Prozessgruppe) — überleben Shell und IDE.
+- Server starten **abgekoppelt** (eigene Prozessgruppe) - überleben Shell und IDE.
 - Stoppen der **ganzen Gruppe**, nicht nur eines PIDs.
 - Status aus **Port-Probe**, nicht aus einer PID-Datei.
 - Port muss vor dem Start frei sein; weicht der Server aus (Next.js), stoppt der Hub und meldet es.
@@ -302,7 +302,7 @@ Optional aufräumen:
 | Cursor-Skill | `rm -rf ~/.cursor/skills/devhub` |
 | Globale Agent-Regeln | Block zwischen den `devhub`-Ankern in `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc`, `~/.codex/AGENTS.md` (oder die Dateien löschen, falls sie nur Hub-Inhalt hatten) |
 | Registry & State | `rm -rf ~/.config/devhub ~/.local/state/devhub` |
-| Projekt-Verträge | Lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` — oder pro Projekt `devhub forget <ordner>` (entfernt Hub-Dateien, behält den Slot gesperrt). Alte `AGENTS.md`-Blöcke von früheren Syncs räumt Forget ebenfalls auf. |
+| Projekt-Verträge | Lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` - oder pro Projekt `devhub forget <ordner>` (entfernt Hub-Dateien, behält den Slot gesperrt). Alte `AGENTS.md`-Blöcke von früheren Syncs räumt Forget ebenfalls auf. |
 
 Das geklonte Repo-Verzeichnis kannst du danach einfach löschen. Ohne `service uninstall` würde launchd den Hub nach dem Löschen des Ordners weiter starten wollen und scheitern.
 
@@ -315,7 +315,7 @@ npm test
 npm run serve:dev    # Hub auf Port 4001, eigenes Zustandsverzeichnis
 ```
 
-Nicht die produktive Instanz auf 4000 zum Experimentieren nutzen — sonst
+Nicht die produktive Instanz auf 4000 zum Experimentieren nutzen - sonst
 verwirren sich PID-Dateien der echten Projekt-Server.
 
 Hintergrund und Designentscheidungen stecken in den Modulen unter `src/`
@@ -333,7 +333,7 @@ dann optional Link, Skill, Regeln und Zustandsordner löschen.
 ### Warum nicht einfach immer `npm run dev`?
 
 Weil der nächste Agent (oder du in einem zweiten Terminal) dasselbe nochmal
-startet. Ohne festen Port weichen Vite/Next oft aus — dann reden Frontend und
+startet. Ohne festen Port weichen Vite/Next oft aus - dann reden Frontend und
 Mensch von verschiedenen Welten. Der Hub hält **eine** Instanz auf **einer** Nummer.
 
 ### Schreibt sync noch in meine AGENTS.md?
@@ -354,7 +354,7 @@ Sonderfälle. (Ältere `dev.json` wird noch gelesen.)
 
 ### Kann ich die Registry / Ports von einem Mac auf den anderen kopieren?
 
-Technisch die `registry.json` — sinnvoller ist oft ein frisches `adopt` auf dem
+Technisch die `registry.json` - sinnvoller ist oft ein frisches `adopt` auf dem
 neuen Rechner. Slots sind lokal; URLs können abweichen. `setup` legt ohnehin
 eine eigene Registry an.
 
@@ -388,7 +388,7 @@ Dateien legen, die du Agenten ohnehin nicht zeigen willst.
 
 ### `npm link` ohne Admin-Rechte?
 
-Dann ohne Link arbeiten: `node /pfad/zu/devhub/bin/dev.js …` — oder ein Alias in
+Dann ohne Link arbeiten: `node /pfad/zu/devhub/bin/dev.js …` - oder ein Alias in
 der Shell setzen. `setup` meldet, wenn `npm link` scheitert.
 
 ---

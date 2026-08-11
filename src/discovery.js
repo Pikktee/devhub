@@ -10,7 +10,7 @@ const SUBDIR_CANDIDATES = ['web', 'app', 'frontend', 'client', 'site', 'landing'
 const COMPOSE_FILES = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']
 
 /** Vite und Verwandte akzeptieren `--strictPort`; Next kennt es nicht und weicht
- *  immer aus — dort muss der Hub nach dem Start selbst nachsehen. */
+ *  immer aus - dort muss der Hub nach dem Start selbst nachsehen. */
 const STRICT_PORT_FRAMEWORKS = new Set(['vite', 'astro', 'nuxt', 'svelte-kit'])
 
 export function packageManagerFor(dir) {
@@ -46,7 +46,7 @@ function hasPythonMarkers(dir) {
 }
 
 /** Wo liegt das Startskript? Etliche Projekte haben es in `web/` oder `landing/`
- *  — die bestehenden launch.json belegen das mit ihren `--prefix`-Aufrufen. */
+ *  - die bestehenden launch.json belegen das mit ihren `--prefix`-Aufrufen. */
 function findNodeDir(dir) {
   const rootPkg = readJson(join(dir, 'package.json'), null)
   if (rootPkg?.scripts?.dev || rootPkg?.scripts?.start) return { dir, pkg: rootPkg, rel: '.' }
@@ -107,7 +107,7 @@ function findDevhubConfigFile(dir) {
   return null
 }
 
-/** Der Plan schreibt `profile`/`rolle`, englische Schlüssel sind ebenso erlaubt —
+/** Der Plan schreibt `profile`/`rolle`, englische Schlüssel sind ebenso erlaubt -
  *  eine Datei, die schon existiert, soll nicht an einer Vokabel scheitern. */
 export function readDevJson(dir) {
   const file = findDevhubConfigFile(dir)
@@ -127,7 +127,7 @@ export function readDevJson(dir) {
 
 /**
  * Script-Args an den Paketmanager. npm/yarn brauchen `--` als Trenner; pnpm
- * reicht alles nach dem Script-Namen durch — ein zusätzliches `--` landet im
+ * reicht alles nach dem Script-Namen durch - ein zusätzliches `--` landet im
  * Kindprozess. Next sieht dann `dev -- --port` und nimmt `--port` als Verzeichnis.
  */
 function packageRunCmd(packageManager, script, args) {
@@ -138,7 +138,7 @@ function packageRunCmd(packageManager, script, args) {
 }
 
 /**
- * `npx serve public -l 3000` — Vercel-serve kennt kein `--port`; an `npm run`
+ * `npx serve public -l 3000` - Vercel-serve kennt kein `--port`; an `npm run`
  * angehängt crasht es. Stattdessen liefert der Hub den Ordner selbst aus.
  */
 function servePublicDir(scriptBody) {
@@ -167,7 +167,7 @@ function inferApiSpec(dir) {
     })
   }
 
-  // Python-API am Root, Frontend in web/ — `uv run start --prod` startet nur die API.
+  // Python-API am Root, Frontend in web/ - `uv run start --prod` startet nur die API.
   if (
     existsSync(join(dir, 'pyproject.toml')) &&
     existsSync(join(dir, 'web', 'package.json')) &&
@@ -210,7 +210,7 @@ function inferProfiles(dir, stack) {
     if (strict) portArgs.push('--strictPort')
     const cmd = packageRunCmd(stack.packageManager, stack.script, portArgs)
 
-    // Frontend kennt die API-Adresse oft fest (8787/8000) — auf den Slot umbiegen.
+    // Frontend kennt die API-Adresse oft fest (8787/8000) - auf den Slot umbiegen.
     const frontendEnv = { PORT: '{port}' }
     if (api) {
       frontendEnv.MAPTALE_API = 'http://127.0.0.1:{backendPort}'
@@ -280,7 +280,7 @@ function inferPythonProfiles(dir) {
  */
 function diagnose(dir, stack) {
   if (stack.kind === 'python') {
-    return 'Python-Projekt ohne erkennbaren Einstieg (app.py/main.py) — Startkommando in devhub.json festlegen'
+    return 'Python-Projekt ohne erkennbaren Einstieg (app.py/main.py) - Startkommando in devhub.json festlegen'
   }
 
   let unterprojekte = []
@@ -290,16 +290,16 @@ function diagnose(dir, stack) {
       .filter((entry) => detectStack(join(dir, entry.name)).kind !== 'unknown')
       .map((entry) => entry.name)
   } catch {
-    /* nicht lesbar — dann eben ohne */
+    /* nicht lesbar - dann eben ohne */
   }
 
   if (unterprojekte.length >= 2) {
-    return `Sammelordner mit ${unterprojekte.length} Unterprojekten — einzeln aufnehmen, z. B. "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
+    return `Sammelordner mit ${unterprojekte.length} Unterprojekten - einzeln aufnehmen, z. B. "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
   }
   if (unterprojekte.length === 1) {
-    return `Startbares liegt in ${unterprojekte[0]}/ — "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
+    return `Startbares liegt in ${unterprojekte[0]}/ - "devhub adopt ${basename(dir)}/${unterprojekte[0]}"`
   }
-  return 'Kein Server erkennbar — falls doch einer laufen soll, devhub.json anlegen'
+  return 'Kein Server erkennbar - falls doch einer laufen soll, devhub.json anlegen'
 }
 
 export function scanRoots(roots) {
@@ -341,7 +341,7 @@ function humanPackageName(name) {
   return trimmed
 }
 
-/** Typische Create-*-App / Vite-Platzhalter — oft unverändert im Repo. */
+/** Typische Create-*-App / Vite-Platzhalter - oft unverändert im Repo. */
 function isScaffoldPackageName(name) {
   if (!name || typeof name !== 'string') return true
   const lower = name.trim().toLowerCase()
@@ -386,7 +386,7 @@ function titleFromDevJson(dir) {
   for (const key of ['displayName', 'title']) {
     if (typeof raw[key] === 'string' && raw[key].trim()) return raw[key].trim()
   }
-  // Top-Level-`name` nur, wenn es vom Ordner abweicht — sonst ist es oft nur der Slug.
+  // Top-Level-`name` nur, wenn es vom Ordner abweicht - sonst ist es oft nur der Slug.
   if (typeof raw.name === 'string' && raw.name.trim() && raw.name.trim() !== basename(dir)) {
     return raw.name.trim()
   }
@@ -417,9 +417,9 @@ function isMetaTitle(title, { fileBase, dirBase } = {}) {
   return false
 }
 
-/** „KI-Duell – Proxy …“ → „KI-Duell“; Untertitel nach Gedankenstrich weglassen. */
+/** „KI-Duell – Proxy …“ → „KI-Duell“; Untertitel nach Bindestrich/Gedankenstrich weglassen. */
 function primaryHeading(title) {
-  const parts = title.split(/\s+[–—-]\s+/)
+  const parts = title.split(/\s+(?:[\u2013\u2014]|-)\s+/)
   if (parts.length < 2) return title
   const head = parts[0].trim()
   if (head.length >= 2 && head.length <= 48) return head
@@ -436,7 +436,7 @@ function titleFromReadme(dir) {
 /**
  * Ableitung ohne Erfindung: nur Quellen, die das Projekt selbst benennt.
  * Expliziter Registry-Eintrag hat Vorrang (siehe describeProject).
- * CLAUDE.md/AGENTS.md bewusst nicht — deren H1 ist oft nur der Dateiname.
+ * CLAUDE.md/AGENTS.md bewusst nicht - deren H1 ist oft nur der Dateiname.
  * README vor package.json: npm-Namen sind oft Scaffold-Reste („react-example“).
  */
 export function suggestDisplayName(dir) {
@@ -463,7 +463,7 @@ export function resolveProject(registry, name) {
 
 /**
  * Host-Label aus Anzeigename; bei Kollision mit einem anderen Projekt der Ordner.
- * CLI-Identität bleibt der Ordnername — nur die Adresse folgt dem Titel.
+ * CLI-Identität bleibt der Ordnername - nur die Adresse folgt dem Titel.
  */
 export function hostLabelFor(registry, name, displayName) {
   const preferred = slugifyLabel(displayName) || slugifyLabel(name)
@@ -546,7 +546,7 @@ export function describeProject(registry, name) {
     }
   }
 
-  // Ohne venv landet man oft bei ModuleNotFoundError — lieber vorher sagen.
+  // Ohne venv landet man oft bei ModuleNotFoundError - lieber vorher sagen.
   if (
     stack.kind === 'python' &&
     source === 'abgeleitet' &&
@@ -554,7 +554,7 @@ export function describeProject(registry, name) {
     !hasPythonVenv(base.path)
   ) {
     problems.push(
-      'Kein venv — einmal: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'
+      'Kein venv - einmal: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'
     )
   }
 
@@ -566,7 +566,7 @@ export function describeProject(registry, name) {
     resolved[profile] = specs.map((spec) => {
       if (seen.has(spec.role)) {
         problems.push(
-          `Profil "${profile}": Rolle "${spec.role}" doppelt — jede Rolle hat genau einen Port, ein zweiter Prozess braucht ein eigenes Profil`
+          `Profil "${profile}": Rolle "${spec.role}" doppelt - jede Rolle hat genau einen Port, ein zweiter Prozess braucht ein eigenes Profil`
         )
       }
       seen.add(spec.role)

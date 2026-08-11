@@ -141,7 +141,7 @@ test('launch.json enthält ausschließlich Attach-Einträge', () => {
   assert.equal(json.configurations.length, 2)
   assert.equal(json.configurations[1].name, 'web-smoke')
   for (const config of json.configurations) {
-    assert.ok(!('runtimeExecutable' in config), 'kein Kommando — sonst startet Claude Code selbst')
+    assert.ok(!('runtimeExecutable' in config), 'kein Kommando - sonst startet Claude Code selbst')
     assert.ok(!('autoPort' in config), 'autoPort erzeugt genau den zweiten Server, den wir verhindern')
     assert.ok(config.url && config.port)
   }
@@ -179,7 +179,7 @@ test('Anzeigename wird aus Projektquellen abgeleitet, nicht erfunden', () => {
   writeFileSync(join(scopedOnly, 'package.json'), JSON.stringify({ name: '@acme/scoped' }))
   assert.equal(suggestDisplayName(scopedOnly), null)
 
-  // H1 in CLAUDE.md ist oft nur der Dateiname — kein Produktname.
+  // H1 in CLAUDE.md ist oft nur der Dateiname - kein Produktname.
   const claudeMeta = join(root, 'pitfall-remake')
   mkdirSync(claudeMeta)
   writeFileSync(join(claudeMeta, 'CLAUDE.md'), '# CLAUDE.md\n\nRegeln.\n')

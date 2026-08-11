@@ -14,7 +14,7 @@ export function readJson(file, fallback = undefined) {
   }
 }
 
-/** Erst danebenschreiben, dann umbenennen — ein abgebrochener Schreibvorgang
+/** Erst danebenschreiben, dann umbenennen - ein abgebrochener Schreibvorgang
  *  darf die Registry nicht halbfertig zurücklassen. */
 export function writeJson(file, data) {
   mkdirSync(dirname(file), { recursive: true })

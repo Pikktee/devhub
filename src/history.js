@@ -3,7 +3,7 @@ import { hubLogFile, logDir } from './paths.js'
 import { logLine, openLog } from './runners/process.js'
 
 /**
- * Kurzer, dauerhafter Verlauf für Adopt/Sync/Forget — lesbar im Hub-Log
+ * Kurzer, dauerhafter Verlauf für Adopt/Sync/Forget - lesbar im Hub-Log
  * und über die API. Kein Ersatz für Git; nur lokale Nachvollziehbarkeit.
  */
 export function recordEvent({ type, project = '', summary, lines = [] }) {
@@ -11,7 +11,7 @@ export function recordEvent({ type, project = '', summary, lines = [] }) {
   const stamp = new Date().toISOString()
   const fd = openLog(hubLogFile)
   try {
-    logLine(fd, `${type}${project ? ` ${project}` : ''} — ${summary}`)
+    logLine(fd, `${type}${project ? ` ${project}` : ''} - ${summary}`)
     for (const line of lines) logLine(fd, `  ${line}`)
   } finally {
     closeSync(fd)
@@ -21,7 +21,7 @@ export function recordEvent({ type, project = '', summary, lines = [] }) {
 
 /**
  * Liest den Hub-Log vom Ende. Identische aufeinanderfolgende Zeilen (z. B.
- * launchd-Port-Spam) zählen als eine Gruppe — sonst verdecken sie den echten
+ * launchd-Port-Spam) zählen als eine Gruppe - sonst verdecken sie den echten
  * Verlauf, wenn nur die letzten N Rohzeilen geliefert würden.
  */
 export function readHubLogTail(maxGroups = 120) {

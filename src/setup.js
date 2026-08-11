@@ -102,11 +102,11 @@ export async function chooseDefaultRoot({
   if (answer === 'p' || answer.startsWith('p ')) {
     let pathAns = answer.startsWith('p ') ? answer.slice(2).trim() : ''
     if (!pathAns) pathAns = (await ask('Pfad: ')).trim()
-    if (!pathAns) throw new Error('Kein Pfad angegeben — Setup abgebrochen')
+    if (!pathAns) throw new Error('Kein Pfad angegeben - Setup abgebrochen')
     return expandPath(pathAns)
   }
   if (answer.startsWith('/') || answer.startsWith('~')) return expandPath(answer)
-  throw new Error('Ungültige Eingabe — Setup abgebrochen')
+  throw new Error('Ungültige Eingabe - Setup abgebrochen')
 }
 
 export async function resolveRoots({
@@ -244,8 +244,8 @@ export async function runSetup(opts = {}) {
     'Nächste Schritte',
     true,
     hubUp
-      ? `Hub auf http://devhub.localhost:${hubPort} · ${open} Projekt${open === 1 ? '' : 'e'} ohne Slot — devhub list / adopt`
-      : `${open} Projekt${open === 1 ? '' : 'e'} ohne Slot — devhub list, dann adopt; Hub: http://devhub.localhost:${hubPort}`
+      ? `Hub auf http://devhub.localhost:${hubPort} · ${open} Projekt${open === 1 ? '' : 'e'} ohne Slot - devhub list / adopt`
+      : `${open} Projekt${open === 1 ? '' : 'e'} ohne Slot - devhub list, dann adopt; Hub: http://devhub.localhost:${hubPort}`
   )
 
   return { steps, roots, hubPort, openCandidates: open }

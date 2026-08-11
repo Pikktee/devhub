@@ -19,7 +19,7 @@ export function assertSlot(slot) {
 export function portFor(slot, role = 'frontend') {
   assertSlot(slot)
   const bank = PORT_BANKS[role]
-  if (!bank) throw new Error(`Unbekannte Rolle "${role}" — erlaubt sind ${ROLES.join(', ')}`)
+  if (!bank) throw new Error(`Unbekannte Rolle "${role}" - erlaubt sind ${ROLES.join(', ')}`)
   return bank + slot
 }
 
@@ -43,7 +43,7 @@ export function slugifyLabel(text) {
 
 /**
  * Host aus dem Anzeigenamen (nicht dem Ordner): maptale.localhost,
- * maptale-smoke.localhost — trennt Cookie-Jars zwischen Profilen.
+ * maptale-smoke.localhost - trennt Cookie-Jars zwischen Profilen.
  */
 export function hostFor(label, profile = 'default', suffix = 'localhost') {
   const base = slugifyLabel(label) || 'projekt'
@@ -56,7 +56,7 @@ export function urlFor(label, profile, port, suffix = 'localhost') {
 }
 
 /**
- * Backend-URLs bewusst als 127.0.0.1 — `localhost` kann auf ::1 zeigen, viele
+ * Backend-URLs bewusst als 127.0.0.1 - `localhost` kann auf ::1 zeigen, viele
  * APIs lauschen nur auf IPv4. Frontend behält den Anzeige-Host.
  */
 export function urlForRole(role, label, profile, port, suffix = 'localhost') {

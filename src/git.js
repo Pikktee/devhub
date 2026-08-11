@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 
 /**
- * Liest die Git-Config ohne `git` aufzurufen — die Übersicht hat dutzende
+ * Liest die Git-Config ohne `git` aufzurufen - die Übersicht hat dutzende
  * Ordner, und ein Spawn pro Projekt wäre spürbar und fragil.
  */
 export function gitDirOf(root) {
@@ -39,7 +39,7 @@ export function remoteUrlFromConfig(configText, preferred = 'origin') {
   return url || null
 }
 
-/** Nur GitHub — andere Remotes bleiben bewusst ohne Link in der Übersicht. */
+/** Nur GitHub - andere Remotes bleiben bewusst ohne Link in der Übersicht. */
 export function githubBrowseUrl(remoteUrl) {
   if (!remoteUrl) return null
   const raw = remoteUrl.trim().replace(/\.git$/i, '')

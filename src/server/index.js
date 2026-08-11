@@ -8,7 +8,7 @@ import { timestamp } from '../util/fmt.js'
 const UI_DIR = join(repoRoot, 'ui')
 
 /**
- * Der Hub zeigt Regeln, Skills und Sitzungsspeicher an — das bleibt auf dieser
+ * Der Hub zeigt Regeln, Skills und Sitzungsspeicher an - das bleibt auf dieser
  * Maschine. Deshalb nur 127.0.0.1, und ein Host-Kopf, der auch dorthin zeigt
  * (sonst könnte eine fremde Seite per DNS-Rebinding hier anklopfen).
  */
@@ -92,7 +92,7 @@ export function startHub({ port }) {
   return new Promise((resolvePromise, reject) => {
     server.once('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        reject(new Error(`Port ${port} ist belegt — läuft der Hub schon? "devhub service status" zeigt es.`))
+        reject(new Error(`Port ${port} ist belegt - läuft der Hub schon? "devhub service status" zeigt es.`))
         return
       }
       reject(err)
@@ -103,7 +103,7 @@ export function startHub({ port }) {
     })
     for (const signal of ['SIGTERM', 'SIGINT']) {
       process.on(signal, () => {
-        console.log(`${timestamp()} devhub  beendet sich — die Dev-Server laufen weiter`)
+        console.log(`${timestamp()} devhub  beendet sich - die Dev-Server laufen weiter`)
         server.close(() => process.exit(0))
       })
     }

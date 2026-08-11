@@ -123,9 +123,9 @@ export function globalContext(projectPath) {
 }
 
 const GAP_CHECKS = [
-  { path: '.cursor/rules/devhub.local.mdc', hint: 'Keine lokale Cursor-Regel — "devhub sync" schreibt Ports nur lokal' },
-  { path: '.claude/launch.json', hint: 'Keine Attach-Datei — "devhub sync" erzeugt sie lokal (gitignore)' },
-  { path: 'devhub.json', hint: 'Kein devhub.json — der Hub leitet den Start oft aus package.json / app.py ab' }
+  { path: '.cursor/rules/devhub.local.mdc', hint: 'Keine lokale Cursor-Regel - "devhub sync" schreibt Ports nur lokal' },
+  { path: '.claude/launch.json', hint: 'Keine Attach-Datei - "devhub sync" erzeugt sie lokal (gitignore)' },
+  { path: 'devhub.json', hint: 'Kein devhub.json - der Hub leitet den Start oft aus package.json / app.py ab' }
 ]
 
 export function agentContext(projectPath, { includeGlobal = true } = {}) {
@@ -149,7 +149,7 @@ export function agentContext(projectPath, { includeGlobal = true } = {}) {
   }
 }
 
-/** Gelesen wird nur, was vorher auch gefunden wurde — kein freier Dateizugriff
+/** Gelesen wird nur, was vorher auch gefunden wurde - kein freier Dateizugriff
  *  über die HTTP-Schnittstelle. */
 export function readAgentFile(projectPath, requested, { includeGlobal = true } = {}) {
   const target = resolve(requested)

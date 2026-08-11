@@ -5,13 +5,13 @@ import { readJson } from '../util/json.js'
 /**
  * Gemessen: `preview_start` hängt sich nicht an einen fremden Server, es bricht
  * ab. Ein Eintrag *ohne* Kommando dagegen wird als reines Attach behandelt und
- * taucht in `preview_list` gar nicht als Prozess auf — Claude Code kann ihn also
+ * taucht in `preview_list` gar nicht als Prozess auf - Claude Code kann ihn also
  * weder starten noch stoppen. Genau das wollen wir.
  */
 export function launchJsonFor(instances) {
   return {
     version: '0.0.1',
-    _hinweis: 'Von devhub erzeugt. Nur Attach-Einträge — nicht von Hand ändern, "devhub sync" überschreibt.',
+    _hinweis: 'Von devhub erzeugt. Nur Attach-Einträge - nicht von Hand ändern, "devhub sync" überschreibt.',
     configurations: instances.flatMap(({ profile, entries }) =>
       entries.map((entry) => ({
         name: profile === 'default' ? entry.name : `${entry.name}-${profile}`,
@@ -72,7 +72,7 @@ export function removeLaunchJson(projectPath, { dryRun = false } = {}) {
       file,
       changed: false,
       action: 'übersprungen',
-      detail: 'Enthält eigene Startkommandos — nicht angefasst'
+      detail: 'Enthält eigene Startkommandos - nicht angefasst'
     }
   }
   if (!dryRun) unlinkSync(file)

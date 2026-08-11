@@ -24,7 +24,7 @@ export function startProcess({ spec, cwd, port, vars, logFile }) {
   if (!cmd.length) throw new Error(`Prozess "${spec.name}" hat kein Kommando`)
   const env = childEnv(substituteAll(spec.env, vars))
 
-  logLine(fd, `Port ${port} frei — starte ${cmd.join(' ')}`)
+  logLine(fd, `Port ${port} frei - starte ${cmd.join(' ')}`)
   logLine(fd, `cwd ${cwd} · abgekoppelt`)
 
   const child = spawn(cmd[0], cmd.slice(1), {

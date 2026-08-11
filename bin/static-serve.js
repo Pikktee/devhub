@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Auslieferung eines statischen Ordners — der Ersatz für die verstreuten
+ * Auslieferung eines statischen Ordners - der Ersatz für die verstreuten
  * `python3 -m http.server`-Einträge in den alten launch.json.
  */
 import http from 'node:http'

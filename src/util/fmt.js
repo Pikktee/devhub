@@ -13,7 +13,7 @@ export const color = {
 }
 
 export function duration(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return '—'
+  if (!Number.isFinite(ms) || ms < 0) return '-'
   const s = Math.floor(ms / 1000)
   if (s < 60) return `${s} s`
   const m = Math.floor(s / 60)
@@ -24,7 +24,7 @@ export function duration(ms) {
 }
 
 export function bytes(n) {
-  if (!Number.isFinite(n) || n <= 0) return '—'
+  if (!Number.isFinite(n) || n <= 0) return '-'
   const units = ['B', 'kB', 'MB', 'GB']
   let value = n
   let i = 0
@@ -40,7 +40,7 @@ export function timestamp(date = new Date()) {
 }
 
 export function dateTime(value) {
-  if (!value) return '—'
+  if (!value) return '-'
   return new Date(value).toLocaleString('de-DE', {
     day: '2-digit',
     month: '2-digit',

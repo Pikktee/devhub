@@ -17,7 +17,7 @@ export function portableContractText({ project }) {
 Falls auf diesem Rechner das CLI \`devhub\` verfügbar ist, gehören die
 Dev-Server diesem Dienst. **Nicht** mit \`npm run dev\`, \`pnpm dev\`, \`vite\`,
 \`next dev\`, \`uvicorn\`, \`python -m http.server\`, \`docker compose up\` oder
-\`npx serve\` starten — sonst läuft leicht ein zweiter Server auf einer anderen
+\`npx serve\` starten - sonst läuft leicht ein zweiter Server auf einer anderen
 Nummer.
 
 Vor dem Öffnen der App: \`devhub status ${project}\`. Starten nur mit
@@ -33,7 +33,7 @@ export function localContractText({ project, hubPort, instances }) {
   const rows = instances
     .map(({ profile, entries }) => {
       const addresses = entries.map((e) => `${e.name}: ${e.url}`).join(', ')
-      return `| \`${profile}\` | ${addresses || '—'} |`
+      return `| \`${profile}\` | ${addresses || '-'} |`
     })
     .join('\n')
 
@@ -43,7 +43,7 @@ Diese Datei ist lokal und sollte nicht committed werden. Ports gelten nur hier.
 
 | Profil | Adresse |
 | --- | --- |
-${rows || '| — | — |'}
+${rows || '| - | - |'}
 
 - \`devhub status ${project}\` · \`devhub up ${project}\` · \`devhub down ${project}\` · \`devhub logs ${project}\`
 - Übersicht: http://devhub.localhost:${hubPort}
@@ -52,7 +52,7 @@ ${rows || '| — | — |'}
 **Nicht** selbst \`npm run dev\` / \`vite\` / \`next dev\` / \`uvicorn\` / \`npx serve\` o. Ä. starten.`
 }
 
-/** @deprecated Alias — früher enthielt der AGENTS.md-Block Ports. */
+/** @deprecated Alias - früher enthielt der AGENTS.md-Block Ports. */
 export function contractText(opts) {
   return localContractText(opts)
 }
@@ -113,7 +113,7 @@ export function removeBlock(file, { dryRun = false } = {}) {
   if (!dryRun) {
     if (!next) {
       unlinkSync(file)
-      return { file, changed: true, deleted: true, action: 'Datei gelöscht', detail: 'Nur Hub-Inhalt — Datei entfernt' }
+      return { file, changed: true, deleted: true, action: 'Datei gelöscht', detail: 'Nur Hub-Inhalt - Datei entfernt' }
     }
     writeFileSync(file, `${next}\n`, 'utf8')
   }
@@ -132,7 +132,7 @@ const GITIGNORE_BLOCK = `${GITIGNORE_START}
 .cursor/rules/devhub.local.mdc
 ${GITIGNORE_END}`
 
-/** Trägt die lokalen Hub-Dateien in .gitignore ein — zwischen festen Markern. */
+/** Trägt die lokalen Hub-Dateien in .gitignore ein - zwischen festen Markern. */
 export function ensureGitignore(projectPath, { dryRun = false } = {}) {
   const file = join(projectPath, '.gitignore')
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : ''

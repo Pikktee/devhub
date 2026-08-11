@@ -63,7 +63,7 @@ export function inspectLink(projectDir) {
       state: 'nur-eine',
       safe: true,
       plan: { real: vorhanden.name, link: fehlend.name },
-      message: `nur ${vorhanden.name} — ${fehlend.name} kann darauf zeigen`
+      message: `nur ${vorhanden.name} - ${fehlend.name} kann darauf zeigen`
     }
   }
 
@@ -75,7 +75,7 @@ export function inspectLink(projectDir) {
       state: 'gleich',
       safe: true,
       plan: { real: NEUTRAL, link: CLAUDE },
-      message: 'zwei identische Kopien — eine kann ein Verweis werden'
+      message: 'zwei identische Kopien - eine kann ein Verweis werden'
     }
   }
 
@@ -83,7 +83,7 @@ export function inspectLink(projectDir) {
     ...base,
     state: 'verschieden',
     safe: false,
-    message: `zwei verschiedene Dateien (${agents.size} und ${claude.size} Bytes) — Zusammenlegen würde Inhalt verwerfen`
+    message: `zwei verschiedene Dateien (${agents.size} und ${claude.size} Bytes) - Zusammenlegen würde Inhalt verwerfen`
   }
 }
 
@@ -102,14 +102,14 @@ export function linkRuleFiles(projectDir, { direction, dryRun = false } = {}) {
         ? { real: NEUTRAL, link: CLAUDE }
         : zustand.plan
 
-  // Bei "nur-eine" bestimmt die vorhandene Datei die Richtung — eine gewünschte
+  // Bei "nur-eine" bestimmt die vorhandene Datei die Richtung - eine gewünschte
   // Richtung darf nicht dazu führen, dass die einzige Quelle gelöscht wird.
   if (zustand.state === 'nur-eine' && plan.real !== zustand.plan.real) {
     const vorhanden = zustand.plan.real
     return {
       ...zustand,
       changed: false,
-      message: `nur ${vorhanden} vorhanden — die Richtung kann erst nach dem Umbenennen gewählt werden`
+      message: `nur ${vorhanden} vorhanden - die Richtung kann erst nach dem Umbenennen gewählt werden`
     }
   }
 

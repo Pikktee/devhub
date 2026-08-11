@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 
 /**
- * Cursor kennt kein `preview_start` — es braucht darum keine Attach-Datei,
+ * Cursor kennt kein `preview_start` - es braucht darum keine Attach-Datei,
  * sondern nur die Regel. `alwaysApply` sorgt dafür, dass sie ohne Nachfrage im
  * Kontext liegt.
  */

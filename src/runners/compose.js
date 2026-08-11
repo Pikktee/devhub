@@ -6,7 +6,7 @@ import { logLine, openLog } from './process.js'
 const run = promisify(execFile)
 
 /**
- * Compose koppelt sich selbst ab — es gibt keine PID, die man behalten könnte.
+ * Compose koppelt sich selbst ab - es gibt keine PID, die man behalten könnte.
  * Zustand kommt darum aus `docker compose ps`, nicht aus einer Datei.
  */
 function args(file, rest) {

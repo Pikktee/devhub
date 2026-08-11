@@ -61,7 +61,7 @@ export async function installService() {
 
   return {
     ok: boot.ok,
-    message: `launchd-Dienst ${launchdLabel} geladen — Hub auf Port ${port}, startet nach Anmeldung von selbst`,
+    message: `launchd-Dienst ${launchdLabel} geladen - Hub auf Port ${port}, startet nach Anmeldung von selbst`,
     plist: plistFile
   }
 }

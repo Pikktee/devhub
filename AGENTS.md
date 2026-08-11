@@ -1,4 +1,4 @@
-# devhub — Hinweise für Coding-Agenten
+# devhub - Hinweise für Coding-Agenten
 
 Dieses Repo ist das Werkzeug, das Dev-Server verwaltet. Es hat selbst keinen
 Dev-Server.
@@ -15,7 +15,7 @@ Dev-Server.
   Fehlermeldungen, Kommentare und die Oberfläche sind deutsch.
 - **Zustand kommt aus der Messung, nicht aus einer Datei.** Ob etwas läuft,
   entscheidet die Port-Probe. Eine PID-Datei zu einem toten Prozess ist die
-  häufigste Lüge in solchen Werkzeugen — dieser Fehler darf nicht zurückkommen.
+  häufigste Lüge in solchen Werkzeugen - dieser Fehler darf nicht zurückkommen.
 - **Gestoppt wird die Prozessgruppe**, nie ein einzelner Prozess.
 - **Kommentare erklären, warum**, nicht was. Wenn eine Zeile nur wiederholt, was
   danebensteht, gehört sie weg.
@@ -28,7 +28,7 @@ npm test
 
 Die Tests dürfen weder `~/.config/devhub/registry.json` noch ein Projekt in
 `~/Dev` anfassen. Sie setzen `DEVHUB_CONFIG_DIR` und `DEVHUB_STATE_DIR` auf ein
-temporäres Verzeichnis, bevor sie Module importieren — deshalb die dynamischen
+temporäres Verzeichnis, bevor sie Module importieren - deshalb die dynamischen
 `await import()` am Dateikopf. Das bitte so lassen.
 
 Beim Ausprobieren an der Oberfläche:

@@ -222,7 +222,7 @@ function zeigeProtokollDialog({ titel, vorspann = [], geaendert = [], rohtext = 
   else dlg.setAttribute('open', '')
 }
 
-/** @deprecated Alias — früher nur Klartext. */
+/** @deprecated Alias - früher nur Klartext. */
 function zeigeProtokoll(text, titel = 'Protokoll') {
   zeigeProtokollDialog({ titel, rohtext: text })
 }
@@ -235,7 +235,7 @@ function formatSyncProtokoll(ergebnis, { titel, vorspann = [] } = {}) {
     if (r.slot != null) lines.push(`Slot ${r.slot}`)
     for (const inst of r.instances ?? []) {
       for (const e of inst.entries ?? []) {
-        lines.push(`  ${inst.profile}/${e.name}: ${e.url ?? '—'}`)
+        lines.push(`  ${inst.profile}/${e.name}: ${e.url ?? '-'}`)
       }
     }
   }
@@ -243,17 +243,17 @@ function formatSyncProtokoll(ergebnis, { titel, vorspann = [] } = {}) {
   for (const z of zeilen) {
     lines.push(`${z.status.padEnd(12)} ${z.pfad}`)
     lines.push(`             ${z.absolut}`)
-    if (z.action) lines.push(`             ${z.action}${z.detail ? ` — ${z.detail}` : ''}`)
+    if (z.action) lines.push(`             ${z.action}${z.detail ? ` - ${z.detail}` : ''}`)
     if (z.backup) lines.push(`             Sicherung: ${z.backup}`)
   }
   if (ergebnis.results?.[0]?.log?.length) {
-    lines.push('', '— Hub-Log —', ...ergebnis.results[0].log)
+    lines.push('', 'Hub-Log:', ...ergebnis.results[0].log)
   }
   const kopf =
     titel ??
     (geaendert.length
       ? `${geaendert.length} Datei${geaendert.length === 1 ? '' : 'en'} geändert`
-      : 'Bereits aktuell — nichts geändert')
+      : 'Bereits aktuell - nichts geändert')
 
   const zusammenfassung = [...vorspann]
   for (const r of ergebnis.results ?? []) {
@@ -282,7 +282,7 @@ function zeigeSyncBericht(ergebnis, optionen = {}) {
         ? kopf
         : 'Bereits aktuell'
   )
-  // Ohne Substanz reicht die Toast-Meldung — kein Modal-Lärm.
+  // Ohne Substanz reicht die Toast-Meldung - kein Modal-Lärm.
   if (!geaendert.length && !vorspann.length) return
   zeigeProtokollDialog({
     titel: kopf,
@@ -410,12 +410,12 @@ function rendereEinstellungen() {
                 </div>`
         )
         .join('')
-    : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
+    : `<p class="einst-leer">Noch keine Wurzel - unten einen Pfad hinzufügen.</p>`
 
   ziel.innerHTML = `
     ${seitenKopfHtml({
       titelHtml: seitenTitelHtml([{ label: 'Einstellungen' }]),
-      untertitel: 'Gilt für diese Maschine — gespeichert in der Registry.',
+      untertitel: 'Gilt für diese Maschine - gespeichert in der Registry.',
       meta: registryMeta
     })}
 
@@ -487,7 +487,7 @@ function rendereEinstellungen() {
               <option value="zed"></option>
               <option value="subl"></option>
             </datalist>
-            <span class="einst-hilfe">Für „Im Editor öffnen“ — muss im PATH liegen.</span>
+            <span class="einst-hilfe">Für „Im Editor öffnen“ - muss im PATH liegen.</span>
           </label>
           <label class="einst-feld">
             <span class="einst-label">Bereitschafts-Timeout</span>
@@ -623,7 +623,7 @@ function syncEinstellungenDraftAusForm() {
     suffixHilfe.innerHTML = `Projekte: <span class="mono">name.${suffix}:…</span>`
   }
   const hubMeta = form.querySelector('[data-einst-sektion="hub"] .einst-sektion-meta')
-  if (hubMeta) hubMeta.textContent = `Port ${form.hubPort?.value || '—'}`
+  if (hubMeta) hubMeta.textContent = `Port ${form.hubPort?.value || '-'}`
   const werkMeta = form.querySelector('[data-einst-sektion="werkzeuge"] .einst-sektion-meta')
   if (werkMeta) werkMeta.textContent = String(form.editor?.value || 'Editor').trim() || 'Editor'
   const agentMeta = form.querySelector('[data-einst-sektion="agenten"] .einst-sektion-meta')
@@ -659,7 +659,7 @@ async function speichereEinstellungen() {
       ? ergebnis.warnings.join(' ')
       : 'Gespeichert'
     zeigeOk(ergebnis.warnings?.length ? ergebnis.warnings[0] : 'Einstellungen gespeichert')
-    // Overview neu laden — Footer/Editor-Name können sich ändern.
+    // Overview neu laden - Footer/Editor-Name können sich ändern.
     await laden({ erzwingen: true })
   } catch (err) {
     zustand.einstellungen.hinweis = err.message
@@ -749,13 +749,13 @@ function frageBestaetigung({
   })
 }
 
-/** Schicker Ersatz für window.confirm — inkl. Opt-in für Abhängigkeiten. */
+/** Schicker Ersatz für window.confirm - inkl. Opt-in für Abhängigkeiten. */
 async function frageSlotEntfernen(projektName) {
   let cleanHint = 'node_modules, .next und ähnliche Caches'
   try {
     const daten = await api(`/api/projects/${encodeURIComponent(projektName)}/artifacts`)
     if (!daten.items?.length) {
-      cleanHint = 'Keine node_modules/.next o. Ä. gefunden — Option ändert nichts'
+      cleanHint = 'Keine node_modules/.next o. Ä. gefunden - Option ändert nichts'
     } else {
       const namen = [...new Set(daten.items.map((i) => i.name))].join(', ')
       cleanHint = `${dateiGroesse(daten.bytes)} in ${daten.items.length} Ordner${daten.items.length === 1 ? '' : 'n'} (${namen})`
@@ -778,7 +778,7 @@ async function frageSlotEntfernen(projektName) {
   })
 }
 
-/** Ersatz für window.prompt — null bei Abbrechen, sonst der (ggf. leere) Text. */
+/** Ersatz für window.prompt - null bei Abbrechen, sonst der (ggf. leere) Text. */
 function frageEingabe({
   titel,
   text = '',
@@ -841,7 +841,7 @@ async function handle(knopf, arbeit) {
   try {
     const ergebnis = await arbeit()
     if (ergebnis?.warnings?.length) zeigeFehler(ergebnis.warnings.join(' · '))
-    // Nach Aktion immer frisch holen — auch wenn gerade ein Poll läuft.
+    // Nach Aktion immer frisch holen - auch wenn gerade ein Poll läuft.
     await laden({ erzwingen: true })
   } catch (err) {
     zeigeFehler(err.message)
@@ -856,11 +856,11 @@ async function handle(knopf, arbeit) {
 
 // ------------------------------------------------------------------ Format
 
-/** Laufzeit wie in der CLI — reine Maßzahl, damit sie neben MB sinnvoll wirkt. */
+/** Laufzeit wie in der CLI - reine Maßzahl, damit sie neben MB sinnvoll wirkt. */
 const dauer = (iso) => {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const ms = Date.now() - new Date(iso)
-  if (!Number.isFinite(ms) || ms < 0) return '—'
+  if (!Number.isFinite(ms) || ms < 0) return '-'
   const s = Math.floor(ms / 1000)
   if (s < 60) return `${s} s`
   const min = Math.floor(s / 60)
@@ -876,7 +876,7 @@ const speicher = (n) => {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`
 }
 
-/** Dateigrößen für Logs/Artefakte — auch unter 1 MB lesbar. */
+/** Dateigrößen für Logs/Artefakte - auch unter 1 MB lesbar. */
 function dateiGroesse(bytes) {
   const n = Number(bytes) || 0
   if (n < 1024) return `${n} B`
@@ -892,7 +892,7 @@ function speicherSummeVon(profil) {
   return (profil.processes ?? []).reduce((s, p) => s + (p.memory ?? 0), 0)
 }
 
-/** Zustandstext für laufende Zeilen — Laufzeit und RAM als zwei Maßzahlen. */
+/** Zustandstext für laufende Zeilen - Laufzeit und RAM als zwei Maßzahlen. */
 function metaLaufend(profil) {
   return [dauer(profil.startedAt), speicher(speicherSummeVon(profil))].filter(Boolean).join(' · ')
 }
@@ -930,7 +930,7 @@ function nameHtml(projekt, extraSub = '', { title } = {}) {
   </span>`
 }
 
-/** „KI-Duell“ und Ordner ki-duell sind dieselbe Identität — Ordner nicht nochmal zeigen. */
+/** „KI-Duell“ und Ordner ki-duell sind dieselbe Identität - Ordner nicht nochmal zeigen. */
 function slugGleich(a, b) {
   const norm = (s) =>
     String(s)
@@ -958,7 +958,7 @@ const iconPlus = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path
 const iconExtern = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 3.25H3.75A1.5 1.5 0 0 0 2.25 4.75v7.5a1.5 1.5 0 0 0 1.5 1.5h7.5a1.5 1.5 0 0 0 1.5-1.5V9.5a.75.75 0 0 0-1.5 0v2.75h-7.5V4.75H6.5a.75.75 0 0 0 0-1.5Z"/><path d="M9.25 2.25h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0V4.56L9.28 8.28a.75.75 0 1 1-1.06-1.06l3.72-3.72H9.25a.75.75 0 0 1 0-1.5Z"/></svg>`
 const iconFinder = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.75 3.5A1.75 1.75 0 0 1 4.5 1.75h2.38c.36 0 .7.14.95.39l1.03 1.03c.1.1.23.15.37.15h2.27A1.75 1.75 0 0 1 13.25 5.07v7.18A1.75 1.75 0 0 1 11.5 14H4.5A1.75 1.75 0 0 1 2.75 12.25V3.5Zm1.5 0v8.75h7.25V5.07H8.78a1.75 1.75 0 0 1-1.24-.51L6.51 3.5H4.25Z"/></svg>`
 
-/** Primäre Power-Aktion links am Status — Start/Stop als Symbol, Slot als Plus. */
+/** Primäre Power-Aktion links am Status - Start/Stop als Symbol, Slot als Plus. */
 function powerKnopfHtml(projekt, profil) {
   if (!projekt.adopted) {
     return `<button type="button" class="knopf symbol aufnehmen" data-aktion="aufnehmen" data-projekt="${h(projekt.name)}" title="Slot vergeben und Agent-Dateien schreiben" aria-label="Slot für ${h(projekt.name)} vergeben">${iconPlus}</button>`
@@ -996,7 +996,7 @@ function menuLink(label, href, title = '') {
   return `<a class="menu-eintrag" role="menuitem" href="${h(href)}" target="_blank" rel="noreferrer" title="${h(title || href)}">${h(label)}</a>`
 }
 
-/** Einstiegs-URLs aus `paths` in der Spec — Basis-URL + Pfad, Label optional. */
+/** Einstiegs-URLs aus `paths` in der Spec - Basis-URL + Pfad, Label optional. */
 function einstiegeVon(proc) {
   if (!proc?.url || !proc.paths?.length) return []
   const basis = proc.url.replace(/\/$/, '')
@@ -1095,7 +1095,7 @@ function zeileHtml(projekt, profil) {
     .join(' · ')
 
   const hinweis = konflikt
-    ? `<span class="hinweis">Ein fremder Prozess belegt ${h(profil.processes.filter((p) => p.foreign).map((p) => p.port).join(', '))} — der Hub hat ihn nicht gestartet.</span>`
+    ? `<span class="hinweis">Ein fremder Prozess belegt ${h(profil.processes.filter((p) => p.foreign).map((p) => p.port).join(', '))} - der Hub hat ihn nicht gestartet.</span>`
     : ''
 
   // Mit Einstiegen: Labels als Adresse (klickbar), Basis nur als Tooltip.
@@ -1109,7 +1109,7 @@ function zeileHtml(projekt, profil) {
         .join('<span class="adr-trenner" aria-hidden="true">·</span>')}</span>`
     : adresse
       ? `<a class="adr${laeuft ? '' : ' aus'}" href="${h(adresse)}" target="_blank" rel="noreferrer">${h(adresse.replace(/^https?:\/\//, ''))}</a>`
-      : '<span class="adr aus">—</span>'
+      : '<span class="adr aus">-</span>'
 
   return `<div class="zeile${konflikt ? ' warnung' : ''}" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">
     <span class="${konflikt ? 'punkt warnung' : punktKlasse(profil.state)}"></span>
@@ -1132,12 +1132,12 @@ function ohneStartHtml(projekt) {
     : /Kein Server/.test(hinweis) ? 'kein Server'
     : 'kein Start'
   const art = projekt.stack?.framework ?? projekt.stack?.kind
-  // Kein Power-Knopf: hier lässt sich kein Slot vergeben — Name öffnet weiter Details.
+  // Kein Power-Knopf: hier lässt sich kein Slot vergeben - Name öffnet weiter Details.
   return `<div class="zeile" title="${h(hinweis)}">
     <span class="punkt"></span>
     <span class="power" aria-hidden="true"></span>
     ${nameHtml(projekt, '', { title: art ? `${art} · ${hinweis}` : hinweis })}
-    <span class="adr aus">—</span>
+    <span class="adr aus">-</span>
     <span class="meta">${h(kurz)}</span>
     <span class="aktionen">${zeilenMenu(projekt, { mitAnsehen: true })}</span>
   </div>`
@@ -1250,7 +1250,7 @@ function rendereUebersicht() {
       listeKopfHtml() +
       `<div class="liste-intro">
         <strong>Noch keine Projekte mit Slot</strong>
-        <p>Nimm ein Projekt auf, damit es hier mit festem Port erscheint. Kandidaten findest du darunter — oder öffne die Befehlspalette mit ⌘K.</p>
+        <p>Nimm ein Projekt auf, damit es hier mit festem Port erscheint. Kandidaten findest du darunter - oder öffne die Befehlspalette mit ⌘K.</p>
       </div>`
   } else {
     $('#liste').innerHTML = listeKopfHtml() + leerHtml()
@@ -1463,7 +1463,7 @@ function agentenHtml() {
   }
 
   const luecken = kontext.gaps
-    .map((g) => `<div class="luecke">${h(g.path)} fehlt — ${h(g.hint)}</div>`)
+    .map((g) => `<div class="luecke">${h(g.path)} fehlt - ${h(g.hint)}</div>`)
     .join('')
 
   const inhalt = `
@@ -1498,7 +1498,7 @@ function startKonfigHtml(projekt) {
       .map(
         (profil) =>
           `${profil.profile}:\n${profil.processes
-            .map((p) => `  ${p.name} (${p.role}) → ${p.port ?? '—'} · ${p.runner}`)
+            .map((p) => `  ${p.name} (${p.role}) → ${p.port ?? '-'} · ${p.runner}`)
             .join('\n')}`
       )
       .join('\n')
@@ -1694,7 +1694,7 @@ async function rendereLog({ ruhig = false } = {}) {
       <pre class="log" id="log-inhalt">${
         daten.lines.length
           ? faerbeLog(daten.lines)
-          : '<span class="z">Noch keine Ausgabe — dieser Prozess wurde vom Hub noch nicht gestartet.</span>'
+          : '<span class="z">Noch keine Ausgabe - dieser Prozess wurde vom Hub noch nicht gestartet.</span>'
       }</pre>`
     if (zustand.log.folgen) {
       const pre = $('#log-inhalt')
@@ -1779,8 +1779,8 @@ function parseHubLog(lines, repeats = []) {
       continue
     }
 
-    // „sync foo — 4 Dateien geändert“ schließt den offenen Sync-Block ab.
-    const summary = text.match(/^(sync|unsync|forget|adopt)\s+(\S+)\s+—\s+(.+)/i)
+    // „sync foo - …“ (früher mit Em-Dash) schließt den offenen Sync-Block ab.
+    const summary = text.match(/^(sync|unsync|forget|adopt)\s+(\S+)\s+(?:-|\u2014)\s+(.+)/i)
     if (summary && aktuell) {
       const prev = aktuell.text.match(/^(sync|unsync|forget|adopt)\s+(\S+)/i)
       if (
@@ -1833,10 +1833,10 @@ function parseHubLog(lines, repeats = []) {
 function verlaufTitel(eintrag) {
   const t = eintrag.text
   let m
-  if ((m = t.match(/^(?:sync|forget|adopt|settings)\s+\S+\s+—\s+(.+)/i))) return m[1]
+  if ((m = t.match(/^(?:sync|forget|adopt|settings)\s+\S+\s+(?:-|\u2014)\s+(.+)/i))) return m[1]
   if (/^unsync\s+\S+$/i.test(t)) return 'Lokale Hub-Dateien entfernt'
   if (/^sync\s+\S+$/i.test(t)) return 'Agent-Dateien synchronisiert'
-  if (/beendet sich/.test(t)) return 'Hub beendet — Dev-Server laufen weiter'
+  if (/beendet sich/.test(t)) return 'Hub beendet - Dev-Server laufen weiter'
   if ((m = t.match(/^Übersicht auf\s+(.+)/i))) return `Hub gestartet · ${m[1]}`
   if ((m = t.match(/^Fehler:\s*(.+)/i))) return m[1]
   return t
@@ -1863,7 +1863,7 @@ function verlaufEintragHtml(eintrag) {
       : ''
 
   return `<article class="verlauf-eintrag" data-typ="${h(eintrag.typ)}">
-    <div class="verlauf-zeit">${eintrag.zeit ? h(eintrag.zeit) : '—'}</div>
+    <div class="verlauf-zeit">${eintrag.zeit ? h(eintrag.zeit) : '-'}</div>
     <div class="verlauf-spur" aria-hidden="true"><span class="verlauf-punkt"></span></div>
     <div class="verlauf-koerper">
       <div class="verlauf-kopf-zeile">
@@ -2011,7 +2011,7 @@ function setzeTitel() {
 }
 
 function setzeNavAktiv() {
-  // Detail/Log gehören zur Übersicht — Verlauf/Einstellungen sind eigene Sektionen.
+  // Detail/Log gehören zur Übersicht - Verlauf/Einstellungen sind eigene Sektionen.
   let aktivNav = 'uebersicht'
   if (zustand.ansicht === 'verlauf') aktivNav = 'verlauf'
   else if (zustand.ansicht === 'einstellungen') aktivNav = 'einstellungen'
@@ -2144,7 +2144,7 @@ function oeffneLog(name, { profil = 'default', prozess = null, ersetzen = false 
 
 // ------------------------------------------------------------------ Daten
 
-/** Ohne Speicher — der schwankt dauernd und würde die Liste unnötig neu zeichnen. */
+/** Ohne Speicher - der schwankt dauernd und würde die Liste unnötig neu zeichnen. */
 function listenSignaturVon(daten) {
   if (!daten?.projects) return ''
   return daten.projects
@@ -2197,7 +2197,7 @@ function fussSignaturVon(daten) {
 }
 
 /**
- * Laufzeit/RAM in bestehenden Zeilen nachziehen — ohne die Liste neu zu bauen
+ * Laufzeit/RAM in bestehenden Zeilen nachziehen - ohne die Liste neu zu bauen
  * (sonst flackert sie und offene Menüs schließen).
  */
 function aktualisiereLaufendeMetas(daten) {
@@ -2271,7 +2271,7 @@ async function laden({ ohneRoute = false, ruhig = false, erzwingen = false } = {
       return
     }
 
-    // Offenes Menü: DOM nicht anfassen — sonst schließt es. Nach dem Schließen erneut zeichnen.
+    // Offenes Menü: DOM nicht anfassen - sonst schließt es. Nach dem Schließen erneut zeichnen.
     if (document.querySelector('details.menu[open]')) {
       zustand.listenSignatur = listeNeu
       zustand._listeWartet = !listeGleich
@@ -2279,7 +2279,7 @@ async function laden({ ohneRoute = false, ruhig = false, erzwingen = false } = {
     }
 
     if (listeGleich) {
-      // Signatur bewusst ohne RAM — Laufzeit/MB trotzdem live nachziehen.
+      // Signatur bewusst ohne RAM - Laufzeit/MB trotzdem live nachziehen.
       if (zustand.ansicht === 'uebersicht') aktualisiereLaufendeMetas(daten)
       if (zustand.ansicht === 'detail') aktualisiereDetailMetas(daten)
       return
@@ -2448,7 +2448,7 @@ function findeProjekt(name) {
   return (zustand.daten?.projects ?? []).find((p) => p.name === name) ?? null
 }
 
-/** Kontextuelles „Zurück“ — erste Nav-Zeile, wenn es eine sinnvolle Oberansicht gibt. */
+/** Kontextuelles „Zurück“ - erste Nav-Zeile, wenn es eine sinnvolle Oberansicht gibt. */
 function baueZurueckBefehl() {
   if (zustand.ansicht === 'log' && zustand.projekt) {
     const projekt = findeProjekt(zustand.projekt)
@@ -2558,7 +2558,7 @@ function baueProjektEintraege() {
       art: 'projekt',
       projekt: m.ordner,
       keywords: [...m.basis, 'projekt', 'öffnen'],
-      // Drill-down — nicht schließen.
+      // Drill-down - nicht schließen.
       ausfuehren: () => oeffneBefehlProjekt(m.ordner)
     })
   })
@@ -2801,7 +2801,7 @@ function filtereUndSortiere(kandidaten, query, limit) {
 
 /**
  * Direkteingabe „projekt aktion“: Aktionstreffer nur, wenn mindestens ein Token
- * den Projektnamen trifft und eines die Aktion — sonst wären reine Aktionswörter
+ * den Projektnamen trifft und eines die Aktion - sonst wären reine Aktionswörter
  * („starten“) zu laut und würden die Projektliste verdrängen.
  */
 function filtereDirektAktionen(query, limit) {
@@ -2840,7 +2840,7 @@ function filtereBefehle(query) {
     const gruppenLabel = projektMeta(projekt).gruppe
     const aktionen = baueProjektAktionen(projekt).map((b) => ({
       ...b,
-      // Name steckt schon im Kontext-Chip — nur abweichende Hints (z. B. URL) behalten.
+      // Name steckt schon im Kontext-Chip - nur abweichende Hints (z. B. URL) behalten.
       hint: b.hint === gruppenLabel ? '' : b.hint
     }))
     return filtereUndSortiere(aktionen, q, 30)
@@ -2857,7 +2857,7 @@ function filtereBefehle(query) {
   const projektTreffer = filtereUndSortiere(projekte, q, 16)
   const aktionTreffer = filtereDirektAktionen(q, 12)
 
-  // Projekte vor Aktionen, solange der Name noch unscharf ist — sonst Direkttreffer oben.
+  // Projekte vor Aktionen, solange der Name noch unscharf ist - sonst Direkttreffer oben.
   if (aktionTreffer.length && tokensKlarFuerAktion(q, projektTreffer)) {
     return [...navTreffer, ...aktionTreffer, ...projektTreffer].slice(0, 28)
   }
@@ -2911,7 +2911,7 @@ function befehlKopfAktualisieren() {
   if (eingabe) {
     eingabe.placeholder = aufProjekt
       ? 'Aktion …'
-      : 'Navigieren, Projekt — oder „projekt aktion“'
+      : 'Navigieren, Projekt - oder „projekt aktion“'
   }
   if (fuss) {
     fuss.innerHTML = aufProjekt
@@ -2999,7 +2999,7 @@ function befehlEineEbeneZurueck() {
 function oeffneBefehl() {
   const dlg = befehlDialog()
   if (!dlg) return
-  // Andere Modals schließen — die Palette braucht den Fokus allein.
+  // Andere Modals schließen - die Palette braucht den Fokus allein.
   for (const id of ['protokoll', 'datei', 'bestaetigung', 'eingabe']) {
     const ander = $(`#${id}`)
     if (ander?.open) {
@@ -3205,7 +3205,7 @@ document.addEventListener('click', async (ereignis) => {
       syncEinstellungenDraftAusForm()
       const draft = zustand.einstellungen.draft
       if (!draft.roots.includes(roh)) {
-        // Rohtext behalten — der Server expandiert ~/…
+        // Rohtext behalten - der Server expandiert ~/…
         draft.roots = [...draft.roots, roh]
       }
       if (input) input.value = ''

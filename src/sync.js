@@ -22,7 +22,7 @@ export function instancesOf(project) {
 function adressenKurz(instances) {
   return instances
     .flatMap(({ profile, entries }) =>
-      entries.map((e) => `${profile}/${e.name} → ${e.url ?? e.port ?? '—'}`)
+      entries.map((e) => `${profile}/${e.name} → ${e.url ?? e.port ?? '-'}`)
     )
     .join(', ')
 }
@@ -42,7 +42,7 @@ function protokolliere(aktion, project, path, changes, extra = []) {
     const rel = c.file.startsWith(path) ? `.${c.file.slice(path.length)}` : c.file
     const status = !c.changed ? 'gleich' : c.deleted ? 'gelöscht' : c.created ? 'neu' : 'geändert'
     lines.push(`  ${status.padEnd(10)} ${rel}`)
-    if (c.action) lines.push(`             ${c.action}${c.detail ? ` — ${c.detail}` : ''}`)
+    if (c.action) lines.push(`             ${c.action}${c.detail ? ` - ${c.detail}` : ''}`)
     if (c.backup) lines.push(`             Sicherung: ${c.backup}`)
   }
   hubLog(lines)
@@ -58,7 +58,7 @@ export function syncProject(registry, name, { dryRun = false } = {}) {
   const lokal = localContractText({ project: name, hubPort: registry.settings.hubPort, instances })
   const changes = []
 
-  // Nur lokal und gitignoriert — kein AGENTS.md im Repo (globale Regeln reichen).
+  // Nur lokal und gitignoriert - kein AGENTS.md im Repo (globale Regeln reichen).
   changes.push({
     adapter: 'cursor',
     ...writeCursorRule(join(project.path, '.cursor'), lokal, {
@@ -78,7 +78,7 @@ export function syncProject(registry, name, { dryRun = false } = {}) {
       changed: true,
       deleted: true,
       action: 'Datei gelöscht',
-      detail: 'Alte Regel mit Ports (oft im Repo) entfernt — ersetzt durch devhub.local.mdc'
+      detail: 'Alte Regel mit Ports (oft im Repo) entfernt - ersetzt durch devhub.local.mdc'
     })
   }
 
@@ -99,7 +99,7 @@ export function unsyncProject(registry, name, { dryRun = false } = {}) {
 
   const changes = []
   changes.push({ adapter: 'claude', ...removeLaunchJson(project.path, { dryRun }) })
-  // Frühere Syncs schrieben einen Block in AGENTS.md — beim Forget aufräumen.
+  // Frühere Syncs schrieben einen Block in AGENTS.md - beim Forget aufräumen.
   changes.push({ adapter: 'neutral', ...removeBlock(join(project.path, 'AGENTS.md'), { dryRun }) })
   changes.push({ adapter: 'cursor', ...removeCursorRule(join(project.path, '.cursor'), { dryRun }) })
 
@@ -119,23 +119,23 @@ Coding-Agenten starten **keine** eigenen Instanzen.
 
 ### Verboten
 \`npm run dev\`, \`pnpm dev\`, \`yarn dev\`, \`bun dev\`, \`vite\`, \`next dev\`,
-\`uvicorn\`, \`python -m http.server\`, \`docker compose up\`, \`npx serve\` —
+\`uvicorn\`, \`python -m http.server\`, \`docker compose up\`, \`npx serve\` -
 auch nicht „kurz zum Testen“.
 
 ### Stattdessen (CLI \`devhub\`)
-1. \`devhub status\` — läuft etwas, welche URL/Ports?
-2. \`devhub up <ordner>\` — startet abgekoppelt (Ordnername unter ~/Dev, z. B. \`journey\`, nicht der Anzeigename).
-3. \`devhub down <ordner>\` — stoppt die **ganze** Prozessgruppe (Frontend+API).
-4. \`devhub logs <ordner>\` — Log lesen bei Fehlern.
+1. \`devhub status\` - läuft etwas, welche URL/Ports?
+2. \`devhub up <ordner>\` - startet abgekoppelt (Ordnername unter ~/Dev, z. B. \`journey\`, nicht der Anzeigename).
+3. \`devhub down <ordner>\` - stoppt die **ganze** Prozessgruppe (Frontend+API).
+4. \`devhub logs <ordner>\` - Log lesen bei Fehlern.
 5. Übersicht: http://devhub.localhost:4000
 
 ### Adressen
 Die URL kommt aus dem **Anzeigenamen** (\`http://maptale.localhost:5120\`),
 der CLI-Schlüssel bleibt der **Ordner** (\`devhub up journey\`). Bei \`devhub status\`
-steht beides. **Backend-URLs nie aus Anzeige-Host + Port zusammenbasteln** —
+steht beides. **Backend-URLs nie aus Anzeige-Host + Port zusammenbasteln** -
 die stehen bei \`devhub status <ordner>\` unter Prozesse (meist \`http://127.0.0.1:…\`).
 Wer selbst startet, erzeugt leicht einen zweiten Server auf einer anderen
-Nummer — der Unterschied fällt erst auf, wenn Login/Daten fehlen.
+Nummer - der Unterschied fällt erst auf, wenn Login/Daten fehlen.
 
 ### Mehrere Prozesse
 Ein \`devhub up\` startet alle Rollen des Profils (z. B. web+api). Nicht nur das
@@ -161,7 +161,7 @@ export function syncGlobal({ dryRun = false, withHook = false } = {}) {
       'sync global',
       ...changes.map((c) => {
         const status = c.changed ? 'geschrieben' : 'gleich'
-        return `  ${status.padEnd(11)} ${c.file}${c.action ? ` — ${c.action}` : ''}`
+        return `  ${status.padEnd(11)} ${c.file}${c.action ? ` - ${c.action}` : ''}`
       })
     ])
   }
@@ -169,7 +169,7 @@ export function syncGlobal({ dryRun = false, withHook = false } = {}) {
 }
 
 /**
- * Der Hook wirkt unabhängig davon, was das Modell gerade denkt — deshalb ist er
+ * Der Hook wirkt unabhängig davon, was das Modell gerade denkt - deshalb ist er
  * die Rückfallebene, wenn eine Regel im Kontext nicht reicht. Standardmäßig aus,
  * weil er auch legitime Aufrufe abfängt.
  */

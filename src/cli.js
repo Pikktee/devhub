@@ -118,15 +118,15 @@ async function cmdStatus(positionals, flags) {
   for (const name of names.sort((a, b) => a.localeCompare(b, 'de'))) {
     const status = await statusOf(registry, name, { withMemory: Boolean(flags.all) })
     if (!status) {
-      rows.push([color.dim('○'), name, color.dim('—'), color.red('nicht gefunden'), '', ''])
+      rows.push([color.dim('○'), name, color.dim('-'), color.red('nicht gefunden'), '', ''])
       continue
     }
     for (const profile of status.profiles) {
       if (profile.state === 'läuft') running++
-      const ports = profile.processes.map((p) => p.port ?? '—').join(' · ')
+      const ports = profile.processes.map((p) => p.port ?? '-').join(' · ')
       const address =
-        profile.processes.find((p) => p.role === 'frontend')?.url ?? profile.processes[0]?.url ?? '—'
-      const since = profile.startedAt ? duration(Date.now() - new Date(profile.startedAt)) : '—'
+        profile.processes.find((p) => p.role === 'frontend')?.url ?? profile.processes[0]?.url ?? '-'
+      const since = profile.startedAt ? duration(Date.now() - new Date(profile.startedAt)) : '-'
       rows.push([
         dot(profile.state),
         name,
@@ -134,12 +134,12 @@ async function cmdStatus(positionals, flags) {
         profile.state,
         profile.state === 'gestoppt' ? color.dim(address) : color.blue(address),
         ports,
-        profile.state === 'gestoppt' ? color.dim('—') : since
+        profile.state === 'gestoppt' ? color.dim('-') : since
       ])
       if (only) {
         for (const proc of profile.processes) {
           details.push(
-            `  ${proc.name.padEnd(8)} ${String(proc.role).padEnd(9)} ${proc.url ?? '—'}` +
+            `  ${proc.name.padEnd(8)} ${String(proc.role).padEnd(9)} ${proc.url ?? '-'}` +
               (proc.listening === false && profile.state !== 'gestoppt' ? color.dim(' (nicht erreichbar)') : '')
           )
         }
@@ -165,7 +165,7 @@ async function cmdUp(positionals, flags) {
 
   const result = await up(name, { profile, registry })
   if (!result.changed && result.processes.length) {
-    console.log(`${color.dim('○')} ${name}/${profile} läuft bereits — nichts zu tun`)
+    console.log(`${color.dim('○')} ${name}/${profile} läuft bereits - nichts zu tun`)
   }
   for (const proc of result.processes) {
     if (proc.ready === false) continue
@@ -245,7 +245,7 @@ async function cmdPorts() {
     }
   }
   console.log(table(rows, { head: ['PROJEKT', 'PROFIL', 'SLOT', 'FRONTEND', 'BACKEND'] }))
-  console.log(color.dim('\nGrün = belegt. Frontend 51NN, Backend 87NN — die Nummer verrät den Slot.'))
+  console.log(color.dim('\nGrün = belegt. Frontend 51NN, Backend 87NN - die Nummer verrät den Slot.'))
 }
 
 async function cmdList() {
@@ -254,8 +254,8 @@ async function cmdList() {
   const rows = projects.map((project) => [
     project.adopted ? color.green('✓') : color.dim('·'),
     project.displayName === project.name ? project.name : `${project.displayName} ${color.dim(`(${project.name})`)}`,
-    project.stack?.framework ?? project.stack?.kind ?? '—',
-    project.adopted ? String(project.slot) : color.dim('—'),
+    project.stack?.framework ?? project.stack?.kind ?? '-',
+    project.adopted ? String(project.slot) : color.dim('-'),
     project.source,
     project.problems.length ? color.yellow(project.problems[0]) : ''
   ])
@@ -334,7 +334,7 @@ async function cmdForget(positionals, flags) {
   }
   registryStore.removeProject(registry, name)
   registryStore.save(registry)
-  console.log(`${color.dim('○')} ${name} entfernt — Slot ${slot} bleibt gesperrt, damit alte Adressen nichts Fremdes öffnen.`)
+  console.log(`${color.dim('○')} ${name} entfernt - Slot ${slot} bleibt gesperrt, damit alte Adressen nichts Fremdes öffnen.`)
 }
 
 // ---------------------------------------------------------------- sync
@@ -347,14 +347,14 @@ async function cmdSync(positionals, flags) {
   for (const result of results) {
     const changed = result.changes.filter((c) => c.changed)
     if (!changed.length) {
-      console.log(`${color.dim('○')} ${result.project} — nichts zu ändern`)
+      console.log(`${color.dim('○')} ${result.project} - nichts zu ändern`)
       continue
     }
     console.log(`${color.green('✓')} ${result.project}`)
     for (const change of changed) {
       const rel = change.file.replace(result.path, '.')
       console.log(`  ${change.adapter.padEnd(8)} ${rel}${change.backup ? color.dim(' (Sicherung angelegt)') : ''}`)
-      if (change.action) console.log(color.dim(`           ${change.action}${change.detail ? ` — ${change.detail}` : ''}`))
+      if (change.action) console.log(color.dim(`           ${change.action}${change.detail ? ` - ${change.detail}` : ''}`))
     }
   }
 
@@ -364,7 +364,7 @@ async function cmdSync(positionals, flags) {
     for (const change of changes.filter((c) => c.changed)) console.log(`  ${change.adapter.padEnd(8)} ${change.file}`)
   }
 
-  if (dryRun) console.log(color.dim('\nProbelauf — es wurde nichts geschrieben.'))
+  if (dryRun) console.log(color.dim('\nProbelauf - es wurde nichts geschrieben.'))
 }
 
 // ---------------------------------------------------------------- agents
@@ -416,7 +416,7 @@ async function cmdAgents(positionals, flags) {
 
   if (context.gaps.length) {
     console.log(`\n${color.bold('Lücken')}`)
-    for (const gap of context.gaps) console.log(`  ${color.yellow('·')} ${gap.path} — ${gap.hint}`)
+    for (const gap of context.gaps) console.log(`  ${color.yellow('·')} ${gap.path} - ${gap.hint}`)
   }
   console.log(color.dim(`\nInhalt ansehen: dev agents ${name} --datei <pfad>`))
 }
@@ -429,7 +429,7 @@ const LINK_MARKER = {
   gleich: color.yellow('·'),
   verschieden: color.red('✗'),
   kaputt: color.red('✗'),
-  keine: color.dim('—')
+  keine: color.dim('-')
 }
 
 async function cmdLink(positionals, flags) {
@@ -452,7 +452,7 @@ async function cmdLink(positionals, flags) {
     console.log(
       color.dim(
         `\n${offen} Projekt${offen === 1 ? '' : 'e'} könnten verknüpft werden: "devhub link <projekt>" oder "devhub link --alle".` +
-          '\nNur anzeigen — es wurde nichts geändert.'
+          '\nNur anzeigen - es wurde nichts geändert.'
       )
     )
     return
@@ -468,18 +468,18 @@ async function cmdLink(positionals, flags) {
     const vorher = inspectLink(project.path)
     if (!vorher.safe) {
       if (einzeln || vorher.state === 'verschieden' || vorher.state === 'kaputt') {
-        console.log(`${LINK_MARKER[vorher.state]} ${name} — ${vorher.message}`)
+        console.log(`${LINK_MARKER[vorher.state]} ${name} - ${vorher.message}`)
       }
       continue
     }
     const ergebnis = linkRuleFiles(project.path, { direction: flags.direction, dryRun })
     console.log(
       ergebnis.changed
-        ? `${color.green('✓')} ${name} — ${ergebnis.message}`
-        : `${color.yellow('·')} ${name} — ${ergebnis.message}`
+        ? `${color.green('✓')} ${name} - ${ergebnis.message}`
+        : `${color.yellow('·')} ${name} - ${ergebnis.message}`
     )
   }
-  if (dryRun) console.log(color.dim('\nProbelauf — es wurde nichts geändert.'))
+  if (dryRun) console.log(color.dim('\nProbelauf - es wurde nichts geändert.'))
 }
 
 // ---------------------------------------------------------------- doctor
@@ -501,7 +501,7 @@ async function cmdDoctor() {
     for (const problem of project.problems) findings.push(['Hinweis', `${project.name}: ${problem}`])
     const link = inspectLink(project.path)
     if (link.state === 'verschieden' || link.state === 'kaputt') {
-      findings.push(['Warnung', `${project.name}: AGENTS.md/CLAUDE.md — ${link.message}`])
+      findings.push(['Warnung', `${project.name}: AGENTS.md/CLAUDE.md - ${link.message}`])
     }
   }
 
@@ -610,7 +610,7 @@ async function cmdOpen(positionals, flags) {
 
 // ---------------------------------------------------------------- help
 
-const HELP = `devhub — die Dev-Server gehören dem Hub, nicht der Sitzung
+const HELP = `devhub - die Dev-Server gehören dem Hub, nicht der Sitzung
   Kurzform: dev (Alias)
 
   devhub status [projekt]              was läuft, auf welcher Nummer
