@@ -293,6 +293,39 @@ async function ladeEinstellungen({ erzwingen = false } = {}) {
   return daten
 }
 
+function seitenTitelHtml(teile) {
+  const knoten = teile
+    .map((teil, i) => {
+      const last = i === teile.length - 1
+      const label = teil.sub
+        ? `${h(teil.label)} <span class="sub">${h(teil.sub)}</span>`
+        : h(teil.label)
+      if (last || !teil.href) {
+        return `<span class="seiten-aktuell"${last ? ' aria-current="page"' : ''}>${label}</span>`
+      }
+      return `<a class="seiten-eltern" href="${h(teil.href)}" data-route="${h(teil.href)}">${h(teil.label)}</a>`
+    })
+    .join('<span class="seiten-trenner" aria-hidden="true">/</span>')
+  return `<h2 class="seiten-titel">${knoten}</h2>`
+}
+
+function seitenKopfHtml({ titelHtml, untertitel = '', meta = '', aktionen = '', extra = '' }) {
+  const neben = meta || aktionen
+  return `<header class="seiten-kopf">
+    <div class="seiten-kopf-text">
+      ${titelHtml}
+      ${untertitel ? `<p class="seiten-untertitel">${untertitel}</p>` : ''}
+      ${extra}
+    </div>
+    ${neben ? `<div class="seiten-kopf-neben">${aktionen}${meta}</div>` : ''}
+  </header>`
+}
+
+const THEME_ICON = {
+  dark: `<svg class="einst-theme-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.2 9.1A5.6 5.6 0 0 1 6.9 2.8 5.7 5.7 0 1 0 13.2 9.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  light: `<svg class="einst-theme-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.6" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.75v1.4M8 12.85v1.4M1.75 8h1.4M12.85 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`
+}
+
 function rendereEinstellungen() {
   const ziel = $('#einstellungen')
   if (!ziel) return
@@ -311,142 +344,130 @@ function rendereEinstellungen() {
       : ''
   const theme = themeAktuell()
   const rootAnzahl = draft.roots.length
+  const registryMeta = draft.registryFile
+    ? `<span class="einst-datei" title="${h(draft.registryFile)}">
+        <span class="meta mono">${h(draft.registryFile)}</span>
+        <span class="pfad-aktionen">
+          <button type="button" class="knopf symbol leise" data-aktion="oeffnen" data-pfad="${h(draft.registryFile)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">↗</button>
+        </span>
+      </span>`
+    : ''
 
   ziel.innerHTML = `
-    <header class="einst-hero">
-      <div class="einst-hero-text">
-        <h2>Einstellungen</h2>
-        <p class="einst-untertitel">Gilt für diese Maschine — gespeichert in der Registry.</p>
-      </div>
-      <div class="einst-hero-meta">
-        ${
-          draft.registryFile
-            ? `<span class="einst-datei" title="${h(draft.registryFile)}">
-                <span class="meta mono">${h(draft.registryFile)}</span>
-                <span class="pfad-aktionen">
-                  <button type="button" class="knopf symbol leise" data-aktion="oeffnen" data-pfad="${h(draft.registryFile)}" data-ziel="finder" title="Im Finder zeigen" aria-label="Im Finder zeigen">↗</button>
-                </span>
-              </span>`
-            : ''
-        }
-      </div>
-    </header>
+    ${seitenKopfHtml({
+      titelHtml: seitenTitelHtml([{ label: 'Einstellungen' }]),
+      untertitel: 'Gilt für diese Maschine — gespeichert in der Registry.',
+      meta: registryMeta
+    })}
 
     <form class="einst-form" id="einst-form" novalidate>
-      <div class="einst-blatt">
-        <section class="einst-sektion" aria-labelledby="einst-darstellung">
-          <div class="einst-sektion-kopf">
-            <h3 id="einst-darstellung">Darstellung</h3>
-            <p>Sofort wirksam, ohne Speichern.</p>
+      <section class="einst-block" aria-labelledby="einst-darstellung">
+        <header class="einst-block-kopf">
+          <h3 id="einst-darstellung">Darstellung</h3>
+          <p>Sofort wirksam, ohne Speichern.</p>
+        </header>
+        <div class="einst-zeile">
+          <div class="einst-zeile-text">
+            <strong>Farbschema</strong>
+            <span>Helle oder dunkle Oberfläche — nur in diesem Browser.</span>
           </div>
-          <div class="einst-zeile">
-            <div class="einst-zeile-text">
-              <strong>Farbschema</strong>
-              <span>Helle oder dunkle Oberfläche.</span>
-            </div>
-            <div class="einst-segment" role="group" aria-label="Farbschema">
-              <button type="button" class="einst-segment-knopf${theme === 'dark' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="dark" aria-pressed="${theme === 'dark'}">Dunkel</button>
-              <button type="button" class="einst-segment-knopf${theme === 'light' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="light" aria-pressed="${theme === 'light'}">Hell</button>
-            </div>
+          <div class="einst-segment" role="group" aria-label="Farbschema">
+            <button type="button" class="einst-segment-knopf${theme === 'dark' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="dark" aria-pressed="${theme === 'dark'}">${THEME_ICON.dark}<span>Dunkel</span></button>
+            <button type="button" class="einst-segment-knopf${theme === 'light' ? ' aktiv' : ''}" data-einst="theme-set" data-theme="light" aria-pressed="${theme === 'light'}">${THEME_ICON.light}<span>Hell</span></button>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="einst-sektion" aria-labelledby="einst-projekte">
-          <div class="einst-sektion-kopf">
-            <h3 id="einst-projekte">Projekt-Wurzeln</h3>
-            <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
+      <section class="einst-block" aria-labelledby="einst-projekte">
+        <header class="einst-block-kopf">
+          <h3 id="einst-projekte">Projekt-Wurzeln</h3>
+          <p>Ordner, in denen der Hub nach Anwendungen sucht.</p>
+        </header>
+        <div class="einst-feld">
+          <div class="einst-roots" id="einst-roots">
+            ${
+              rootAnzahl
+                ? draft.roots
+                    .map(
+                      (pfad, i) => `<div class="einst-root">
+                  <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
+                  <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="${h(pfad)} entfernen" ${rootAnzahl <= 1 ? 'disabled' : ''}>×</button>
+                </div>`
+                    )
+                    .join('')
+                : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
+            }
           </div>
-          <div class="einst-feld">
-            <div class="einst-roots-kopf">
-              <span class="einst-label">Verzeichnisse</span>
-              <span class="einst-roots-anzahl">${rootAnzahl}</span>
-            </div>
-            <div class="einst-roots" id="einst-roots">
-              ${
-                rootAnzahl
-                  ? draft.roots
-                      .map(
-                        (pfad, i) => `<div class="einst-root">
-                    <span class="einst-root-mark" aria-hidden="true"></span>
-                    <span class="einst-root-pfad mono" title="${h(pfad)}">${h(pfad)}</span>
-                    <button type="button" class="knopf symbol leise" data-einst="root-weg" data-index="${i}" title="Entfernen" aria-label="${h(pfad)} entfernen" ${rootAnzahl <= 1 ? 'disabled' : ''}>×</button>
-                  </div>`
-                      )
-                      .join('')
-                  : `<p class="einst-leer">Noch keine Wurzel — unten einen Pfad hinzufügen.</p>`
-              }
-            </div>
-            <div class="einst-root-neu">
-              <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder absoluter Pfad" autocomplete="off" spellcheck="false" aria-label="Neues Wurzelverzeichnis">
-              <button type="button" class="knopf" data-einst="root-dazu">Hinzufügen</button>
-            </div>
-            <span class="einst-hilfe"><kbd>↵</kbd> im Feld fügt den Pfad hinzu. Mindestens eine Wurzel bleibt nötig.</span>
+          <div class="einst-root-neu">
+            <input type="text" id="einst-root-input" class="einst-input mono" placeholder="~/Dev oder absoluter Pfad" autocomplete="off" spellcheck="false" aria-label="Neues Wurzelverzeichnis">
+            <button type="button" class="knopf" data-einst="root-dazu">Hinzufügen</button>
           </div>
-        </section>
+          <span class="einst-hilfe"><kbd>↵</kbd> im Feld fügt den Pfad hinzu. Mindestens eine Wurzel bleibt nötig.</span>
+        </div>
+      </section>
 
-        <section class="einst-sektion" aria-labelledby="einst-hub">
-          <div class="einst-sektion-kopf">
-            <h3 id="einst-hub">Hub &amp; Adressen</h3>
-            <p>Port der Übersicht und Domain für Projekt-URLs.</p>
-          </div>
-          <div class="einst-raster">
-            <label class="einst-feld">
-              <span class="einst-label">Hub-Port</span>
-              <input type="number" name="hubPort" class="einst-input mono" min="1024" max="65535" step="1" value="${h(draft.hubPort)}" required>
-              <span class="einst-hilfe">Übersicht: <span class="mono">http://devhub.localhost:${h(draft.hubPort)}</span></span>
-            </label>
-            <label class="einst-feld">
-              <span class="einst-label">Domain-Suffix</span>
-              <input type="text" name="domainSuffix" class="einst-input mono" value="${h(draft.domainSuffix)}" required autocomplete="off" spellcheck="false">
-              <span class="einst-hilfe">Projekte: <span class="mono">name.${h(draft.domainSuffix)}:…</span></span>
-            </label>
-          </div>
-          ${portHinweis}
-        </section>
-
-        <section class="einst-sektion" aria-labelledby="einst-werkzeuge">
-          <div class="einst-sektion-kopf">
-            <h3 id="einst-werkzeuge">Werkzeuge</h3>
-            <p>Editor und Wartezeit beim Starten.</p>
-          </div>
-          <div class="einst-raster">
-            <label class="einst-feld">
-              <span class="einst-label">Editor-Kommando</span>
-              <input type="text" name="editor" class="einst-input mono" list="einst-editor-vorschlaege" value="${h(draft.editor)}" required autocomplete="off" spellcheck="false">
-              <datalist id="einst-editor-vorschlaege">
-                <option value="cursor"></option>
-                <option value="code"></option>
-                <option value="zed"></option>
-                <option value="subl"></option>
-              </datalist>
-              <span class="einst-hilfe">Für „Im Editor öffnen“ — muss im PATH liegen.</span>
-            </label>
-            <label class="einst-feld">
-              <span class="einst-label">Bereitschafts-Timeout</span>
-              <div class="einst-timeout">
-                <input type="number" name="readyTimeoutSek" class="einst-input mono" min="5" max="600" step="1" value="${h(timeoutSek)}" required aria-describedby="einst-timeout-hilfe">
-                <span class="einst-timeout-einheit">Sekunden</span>
-              </div>
-              <span class="einst-hilfe" id="einst-timeout-hilfe">Maximale Wartezeit, bis der Server-Port antwortet.</span>
-            </label>
-          </div>
-        </section>
-
-        <section class="einst-sektion" aria-labelledby="einst-agenten">
-          <div class="einst-sektion-kopf">
-            <h3 id="einst-agenten">Agenten</h3>
-            <p>Was die Detailansicht unter Agent-Kontext zeigt.</p>
-          </div>
-          <label class="einst-schalter">
-            <span class="einst-schalter-text">
-              <strong>Globale Agent-Dateien zeigen</strong>
-              <span>Zusätzlich CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis.</span>
-            </span>
-            <input type="checkbox" name="showGlobalAgentContext" ${draft.showGlobalAgentContext ? 'checked' : ''}>
-            <span class="einst-schalter-ui" aria-hidden="true"></span>
+      <section class="einst-block" aria-labelledby="einst-hub">
+        <header class="einst-block-kopf">
+          <h3 id="einst-hub">Hub &amp; Adressen</h3>
+          <p>Port der Übersicht und Domain für Projekt-URLs.</p>
+        </header>
+        <div class="einst-raster">
+          <label class="einst-feld">
+            <span class="einst-label">Hub-Port</span>
+            <input type="number" name="hubPort" class="einst-input mono" min="1024" max="65535" step="1" value="${h(draft.hubPort)}" required>
+            <span class="einst-hilfe">Übersicht: <span class="mono">http://devhub.localhost:${h(draft.hubPort)}</span></span>
           </label>
-        </section>
-      </div>
+          <label class="einst-feld">
+            <span class="einst-label">Domain-Suffix</span>
+            <input type="text" name="domainSuffix" class="einst-input mono" value="${h(draft.domainSuffix)}" required autocomplete="off" spellcheck="false">
+            <span class="einst-hilfe">Projekte: <span class="mono">name.${h(draft.domainSuffix)}:…</span></span>
+          </label>
+        </div>
+        ${portHinweis}
+      </section>
+
+      <section class="einst-block" aria-labelledby="einst-werkzeuge">
+        <header class="einst-block-kopf">
+          <h3 id="einst-werkzeuge">Werkzeuge</h3>
+          <p>Editor und Wartezeit beim Starten.</p>
+        </header>
+        <div class="einst-raster">
+          <label class="einst-feld">
+            <span class="einst-label">Editor-Kommando</span>
+            <input type="text" name="editor" class="einst-input mono" list="einst-editor-vorschlaege" value="${h(draft.editor)}" required autocomplete="off" spellcheck="false">
+            <datalist id="einst-editor-vorschlaege">
+              <option value="cursor"></option>
+              <option value="code"></option>
+              <option value="zed"></option>
+              <option value="subl"></option>
+            </datalist>
+            <span class="einst-hilfe">Für „Im Editor öffnen“ — muss im PATH liegen.</span>
+          </label>
+          <label class="einst-feld">
+            <span class="einst-label">Bereitschafts-Timeout</span>
+            <div class="einst-timeout">
+              <input type="number" name="readyTimeoutSek" class="einst-input mono" min="5" max="600" step="1" value="${h(timeoutSek)}" required aria-describedby="einst-timeout-hilfe">
+              <span class="einst-timeout-einheit">Sekunden</span>
+            </div>
+            <span class="einst-hilfe" id="einst-timeout-hilfe">Maximale Wartezeit, bis der Server-Port antwortet.</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="einst-block" aria-labelledby="einst-agenten">
+        <header class="einst-block-kopf">
+          <h3 id="einst-agenten">Agenten</h3>
+          <p>Was die Detailansicht unter Agent-Kontext zeigt.</p>
+        </header>
+        <label class="einst-schalter">
+          <span class="einst-schalter-text">
+            <strong>Globale Agent-Dateien zeigen</strong>
+            <span>Zusätzlich CLAUDE.md, Cursor-Regeln und Codex-AGENTS aus dem Home-Verzeichnis.</span>
+          </span>
+          <input type="checkbox" name="showGlobalAgentContext" ${draft.showGlobalAgentContext ? 'checked' : ''}>
+          <span class="einst-schalter-ui" aria-hidden="true"></span>
+        </label>
+      </section>
 
       <div class="einst-dock">
         <div class="einst-leiste${dirty ? ' dirty' : ''}">
@@ -455,7 +476,7 @@ function rendereEinstellungen() {
               zustand.einstellungen.hinweis
                 ? `<span class="einst-hinweis">${h(zustand.einstellungen.hinweis)}</span>`
                 : dirty
-                  ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
+                  ? `<span class="einst-dirty">Ungespeicherte Änderungen <kbd class="taste-hint">⌘S</kbd></span>`
                   : `<span class="einst-sauber">Alles gespeichert</span>`
             }
           </div>
@@ -475,9 +496,9 @@ function rendereEinstellungen() {
 /** Fade nur solange Inhalt unter dem sticky Dock durchscrollt. */
 function syncEinstDockScrim() {
   const dock = document.querySelector('.einst-dock')
-  const blatt = document.querySelector('.einst-blatt')
-  if (!dock || !blatt || zustand.ansicht !== 'einstellungen') return
-  const ueberlappt = blatt.getBoundingClientRect().bottom > dock.getBoundingClientRect().top + 1
+  const letzteKarte = document.querySelector('.einst-block:last-of-type')
+  if (!dock || !letzteKarte || zustand.ansicht !== 'einstellungen') return
+  const ueberlappt = letzteKarte.getBoundingClientRect().bottom > dock.getBoundingClientRect().top + 1
   dock.classList.toggle('am-ende', !ueberlappt)
 }
 
@@ -518,7 +539,7 @@ function syncEinstellungenDraftAusForm() {
   const status = form.querySelector('.einst-leiste-status')
   if (status) {
     status.innerHTML = dirty
-      ? `<span class="einst-dirty">Ungespeicherte Änderungen</span>`
+      ? `<span class="einst-dirty">Ungespeicherte Änderungen <kbd class="taste-hint">⌘S</kbd></span>`
       : `<span class="einst-sauber">Alles gespeichert</span>`
   }
   const speichern = form.querySelector('[data-einst="speichern"]')
@@ -1146,7 +1167,7 @@ function rendereUebersicht() {
 }
 
 function leerHtml() {
-  return `<div class="leer-box"><strong>Keine Projekte gefunden</strong><p>Unter ~/Dev wurden keine Kandidaten gefunden.</p></div>`
+  return `<div class="leer-box"><strong>Keine Projekte gefunden</strong><p>Unter den konfigurierten Wurzeln wurden keine Kandidaten gefunden. Prüfe die Projekt-Wurzeln in den Einstellungen.</p></div>`
 }
 
 // ------------------------------------------------------------------ Detail
@@ -1416,21 +1437,20 @@ function rendereDetail() {
     .filter(Boolean)
     .join('')
 
-  const kopf = `<header class="detail-hero">
-    <div class="detail-hero-text">
-      <h2><span class="detail-titel">${h(titel)}</span>${
-        titel === projekt.name ? '' : ` <span class="sub">${h(projekt.name)}</span>`
-      }</h2>
-      <div class="detail-meta">
-        <span class="pfad" title="${h(projekt.path)}">${h(projekt.path)}</span>
-        ${metaChips}
-      </div>
-    </div>
-    <div class="detail-hero-aktionen">
-      ${hauptProfil ? primaerAktionHtml(projekt, hauptProfil) : ''}
-      ${detailMenu(projekt, hauptProfil)}
-    </div>
-  </header>`
+  const kopf = seitenKopfHtml({
+    titelHtml: seitenTitelHtml([
+      { label: 'Übersicht', href: '/' },
+      {
+        label: titel,
+        sub: titel === projekt.name ? null : projekt.name
+      }
+    ]),
+    extra: `<div class="detail-meta">
+      <span class="pfad" title="${h(projekt.path)}">${h(projekt.path)}</span>
+      ${metaChips}
+    </div>`,
+    aktionen: `${hauptProfil ? primaerAktionHtml(projekt, hauptProfil) : ''}${detailMenu(projekt, hauptProfil)}`
+  })
 
   const weitereProfile = projekt.profiles
     .slice(1)
@@ -1552,11 +1572,16 @@ async function rendereLog({ ruhig = false } = {}) {
           `<button class="chip" data-aktion="log-prozess" data-prozess="${h(proc)}" aria-pressed="${proc === daten.process}">${h(proc)}</button>`
       )
       .join('')
+    const detailUrl = `/projekt/${encodeURIComponent(zustand.projekt)}`
     $('#log').innerHTML = `
-      <header class="log-kopf">
-        <h2>Log · ${h(titel)}</h2>
-        <p class="log-untertitel">Ausgabe dieses Projekts${daten.process ? ` · Prozess <strong>${h(daten.process)}</strong>` : ''}</p>
-      </header>
+      ${seitenKopfHtml({
+        titelHtml: seitenTitelHtml([
+          { label: 'Übersicht', href: '/' },
+          { label: titel, href: detailUrl },
+          { label: 'Log' }
+        ]),
+        untertitel: `Ausgabe dieses Projekts${daten.process ? ` · Prozess <strong>${h(daten.process)}</strong>` : ''}`
+      })}
       <div class="log-leiste">
         <span class="log-prozesse" role="toolbar" aria-label="Prozess wählen">${chips}</span>
         <span class="rechts">
@@ -1777,16 +1802,11 @@ async function rendereVerlauf({ ruhig = false } = {}) {
         </div>`
 
     ziel.innerHTML = `
-      <header class="verlauf-hero">
-        <div class="verlauf-hero-text">
-          <h2>Verlauf</h2>
-          <p class="verlauf-untertitel">Hub-Aktionen und Meldungen</p>
-        </div>
-        <div class="verlauf-hero-meta">
-          ${eintraege.length ? `<span class="verlauf-count">${eintraege.length} Einträge</span>` : ''}
-          ${meta}
-        </div>
-      </header>
+      ${seitenKopfHtml({
+        titelHtml: seitenTitelHtml([{ label: 'Verlauf' }]),
+        untertitel: 'Hub-Aktionen und Meldungen',
+        meta: `${eintraege.length ? `<span class="verlauf-count">${eintraege.length} Einträge</span>` : ''}${meta}`
+      })}
       ${liste}`
   } catch (err) {
     if (!ruhig) {
@@ -1843,46 +1863,6 @@ function setzeTitel() {
   else document.title = 'devhub'
 }
 
-function krumeTeil(label, { href, aktuell = false } = {}) {
-  const titel = ` title="${h(label)}"`
-  if (aktuell) {
-    return `<li><span class="krume-aktuell" aria-current="page"${titel}>${h(label)}</span></li>`
-  }
-  return `<li><a class="krume-glied" href="${h(href)}" data-route="${h(href)}"${titel}>${h(label)}</a></li>`
-}
-
-function rendereKrume() {
-  const nav = $('#krume')
-  if (!nav) return
-
-  // Hauptnav deckt Hub-Seiten ab — Krume nur für Projekthierarchie.
-  if (
-    zustand.ansicht === 'uebersicht' ||
-    zustand.ansicht === 'verlauf' ||
-    zustand.ansicht === 'einstellungen' ||
-    !zustand.projekt
-  ) {
-    nav.hidden = true
-    nav.innerHTML = ''
-    return
-  }
-
-  const projekt = zustand.daten?.projects.find((p) => p.name === zustand.projekt)
-  const titel = projekt ? anzeigeName(projekt) : zustand.projekt
-  const detailUrl = `/projekt/${encodeURIComponent(zustand.projekt)}`
-  const teile = [krumeTeil('Übersicht', { href: '/' })]
-
-  if (zustand.ansicht === 'log') {
-    teile.push(krumeTeil(titel, { href: detailUrl }))
-    teile.push(krumeTeil('Log', { aktuell: true }))
-  } else {
-    teile.push(krumeTeil(titel, { aktuell: true }))
-  }
-
-  nav.innerHTML = `<ol>${teile.join('')}</ol>`
-  nav.hidden = false
-}
-
 function setzeNavAktiv() {
   // Detail/Log gehören zur Übersicht — Verlauf/Einstellungen sind eigene Sektionen.
   let aktivNav = 'uebersicht'
@@ -1907,7 +1887,6 @@ function setzeAnsicht(ansicht) {
   if (ansicht === 'uebersicht') rendereUebersicht()
   if (ansicht === 'verlauf') rendereVerlauf()
   if (ansicht === 'einstellungen') rendereEinstellungen()
-  rendereKrume()
   setzeNavAktiv()
   setzeTitel()
   scrollTo({ top: 0 })
@@ -1984,8 +1963,19 @@ async function wendeRouteAn() {
   setzeAnsicht('detail')
 }
 
+function hatUngespeicherteEinstellungen() {
+  return zustand.ansicht === 'einstellungen' && einstellungenDirty()
+}
+
 function geheZu(ziel, { ersetzen = false } = {}) {
   const url = typeof ziel === 'string' ? ziel : urlFuer(ziel)
+  if (hatUngespeicherteEinstellungen() && !url.startsWith('/einstellungen')) {
+    const ok = confirm('Einstellungen haben ungespeicherte Änderungen. Trotzdem verlassen?')
+    if (!ok) return
+    zustand.einstellungen.draft = einstellungenKlon(zustand.einstellungen.geladen)
+    zustand.einstellungen.dirty = false
+    zustand.einstellungen.hinweis = ''
+  }
   const jetzt = `${location.pathname}${location.search}`
   if (url !== jetzt) history[ersetzen ? 'replaceState' : 'pushState'](null, '', url)
   return wendeRouteAn()
@@ -2151,10 +2141,7 @@ async function laden({ ohneRoute = false, ruhig = false, erzwingen = false } = {
     zustand.listenSignatur = listeNeu
     zustand._listeWartet = false
     if (zustand.ansicht === 'uebersicht') rendereUebersicht()
-    if (zustand.ansicht === 'detail') {
-      rendereDetail()
-      rendereKrume()
-    }
+    if (zustand.ansicht === 'detail') rendereDetail()
   } catch (err) {
     if (!ruhig) zeigeFehler(`Hub antwortet nicht: ${err.message}`)
   } finally {
@@ -3245,10 +3232,7 @@ document.addEventListener('toggle', (ereignis) => {
   if (panel.matches('details.menu') && !panel.open && zustand._listeWartet) {
     zustand._listeWartet = false
     if (zustand.ansicht === 'uebersicht') rendereUebersicht()
-    if (zustand.ansicht === 'detail') {
-      rendereDetail()
-      rendereKrume()
-    }
+    if (zustand.ansicht === 'detail') rendereDetail()
   }
 }, true)
 
@@ -3265,7 +3249,23 @@ document.addEventListener('visibilitychange', () => {
 })
 
 window.addEventListener('popstate', () => {
+  if (hatUngespeicherteEinstellungen()) {
+    const ok = confirm('Einstellungen haben ungespeicherte Änderungen. Trotzdem verlassen?')
+    if (!ok) {
+      history.pushState(null, '', '/einstellungen')
+      return
+    }
+    zustand.einstellungen.draft = einstellungenKlon(zustand.einstellungen.geladen)
+    zustand.einstellungen.dirty = false
+    zustand.einstellungen.hinweis = ''
+  }
   wendeRouteAn()
+})
+
+window.addEventListener('beforeunload', (ereignis) => {
+  if (!hatUngespeicherteEinstellungen()) return
+  ereignis.preventDefault()
+  ereignis.returnValue = ''
 })
 
 const dateiDlg = dateiDialog()
