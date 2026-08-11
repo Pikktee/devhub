@@ -10,7 +10,7 @@ import { syncAll, syncGlobal, syncProject, unsyncProject } from '../sync.js'
 import { cleanProjectArtifacts, listProjectArtifacts } from '../clean.js'
 import { serviceStatus } from '../service.js'
 import { instance } from '../paths.js'
-import { recordEvent, readHubLogTail } from '../history.js'
+import { clearHubLog, recordEvent, readHubLogTail } from '../history.js'
 import { assertOpenablePath, openLocalPath } from '../open.js'
 
 async function projectPayload(registry, project, { withMemory = false } = {}) {
@@ -285,7 +285,12 @@ export const routes = [
   {
     method: 'GET',
     pattern: /^\/api\/hub-log$/,
-    handler: async (_req, _params, query) => readHubLogTail(Number(query.get('lines') ?? 120))
+    handler: async (_req, _params, query) => readHubLogTail(Number(query.get('lines') ?? 200))
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/hub-log$/,
+    handler: async () => clearHubLog()
   },
   {
     method: 'POST',

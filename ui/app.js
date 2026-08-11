@@ -24,13 +24,13 @@ const zustand = {
 }
 
 const THEME_KEY = 'devhub-theme'
-const EINST_SEKTIONEN_KEY = 'devhub-einst-sektionen'
+const EINST_SEKTIONEN_KEY = 'devhub-einst-sektionen-v2'
 const EINST_SEKTIONEN_DEFAULT = {
   oberflaeche: true,
   projekte: true,
-  hub: false,
-  werkzeuge: false,
-  agenten: false
+  hub: true,
+  werkzeuge: true,
+  agenten: true
 }
 const EINST_CHEVRON = `<svg class="einst-sektion-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
@@ -711,48 +711,70 @@ async function oeffnePfad(pfad, { finder = false } = {}) {
   })
 }
 
-/** Schicker Ersatz für window.confirm — inkl. Opt-in für Abhängigkeiten. */
-async function frageSlotEntfernen(projektName) {
+/** Allgemeiner Bestätigungsdialog. Bei `mitClean` erscheint die Abhängigkeiten-Option. */
+function frageBestaetigung({
+  titel,
+  text = '',
+  liste = [],
+  okLabel = 'Bestätigen',
+  gefahr = false,
+  mitClean = false,
+  cleanHint = ''
+} = {}) {
   const dlg = $('#bestaetigung')
   const clean = $('#bestaetigung-clean')
   const hint = $('#bestaetigung-clean-hint')
   const option = $('#bestaetigung-option')
+  const okBtn = $('#bestaetigung-ok')
 
-  $('#bestaetigung-titel').textContent = `Slot von „${projektName}“ entfernen?`
-  $('#bestaetigung-text').textContent = 'Der Slot bleibt gesperrt und wird nicht neu vergeben.'
-  $('#bestaetigung-liste').innerHTML = [
-    'Lokale Dateien (Cursor-Regel, launch.json) werden entfernt; ein alter AGENTS.md-Block ebenfalls',
-    'Der Dev-Server wird weder gestartet noch gestoppt'
-  ]
-    .map((t) => `<li>${h(t)}</li>`)
-    .join('')
-
+  $('#bestaetigung-titel').textContent = titel
+  $('#bestaetigung-text').textContent = text
+  $('#bestaetigung-liste').innerHTML = liste.map((t) => `<li>${h(t)}</li>`).join('')
+  option.hidden = !mitClean
   clean.checked = false
-  option.hidden = false
-  // Größe vor dem Öffnen laden — sonst springt der Dialog, wenn der Hint nachzieht.
-  hint.textContent = 'node_modules, .next und ähnliche Caches'
-  try {
-    const daten = await api(`/api/projects/${encodeURIComponent(projektName)}/artifacts`)
-    if (!daten.items?.length) {
-      hint.textContent = 'Keine node_modules/.next o. Ä. gefunden — Option ändert nichts'
-    } else {
-      const namen = [...new Set(daten.items.map((i) => i.name))].join(', ')
-      hint.textContent = `${speicherBytes(daten.bytes)} in ${daten.items.length} Ordner${daten.items.length === 1 ? '' : 'n'} (${namen})`
-    }
-  } catch {
-    hint.textContent = 'node_modules, .next und ähnliche Caches'
-  }
+  if (mitClean) hint.textContent = cleanHint || 'node_modules, .next und ähnliche Caches'
+  okBtn.textContent = okLabel
+  okBtn.className = gefahr ? 'knopf gefahr fest' : 'knopf primaer'
 
   return new Promise((resolve) => {
     const fertig = () => {
       dlg.removeEventListener('close', fertig)
-      if (dlg.returnValue === 'ok') resolve({ ok: true, cleanDeps: clean.checked })
+      if (dlg.returnValue === 'ok') resolve({ ok: true, cleanDeps: Boolean(clean.checked) })
       else resolve({ ok: false, cleanDeps: false })
     }
     dlg.addEventListener('close', fertig)
     if (typeof dlg.showModal === 'function') dlg.showModal()
     else dlg.setAttribute('open', '')
-    $('#bestaetigung-ok')?.focus({ preventScroll: true })
+    okBtn?.focus({ preventScroll: true })
+  })
+}
+
+/** Schicker Ersatz für window.confirm — inkl. Opt-in für Abhängigkeiten. */
+async function frageSlotEntfernen(projektName) {
+  let cleanHint = 'node_modules, .next und ähnliche Caches'
+  try {
+    const daten = await api(`/api/projects/${encodeURIComponent(projektName)}/artifacts`)
+    if (!daten.items?.length) {
+      cleanHint = 'Keine node_modules/.next o. Ä. gefunden — Option ändert nichts'
+    } else {
+      const namen = [...new Set(daten.items.map((i) => i.name))].join(', ')
+      cleanHint = `${dateiGroesse(daten.bytes)} in ${daten.items.length} Ordner${daten.items.length === 1 ? '' : 'n'} (${namen})`
+    }
+  } catch {
+    /* Standardhinweis bleibt */
+  }
+
+  return frageBestaetigung({
+    titel: `Slot von „${projektName}“ entfernen?`,
+    text: 'Der Slot bleibt gesperrt und wird nicht neu vergeben.',
+    liste: [
+      'Lokale Dateien (Cursor-Regel, launch.json) werden entfernt; ein alter AGENTS.md-Block ebenfalls',
+      'Der Dev-Server wird weder gestartet noch gestoppt'
+    ],
+    okLabel: 'Slot entfernen',
+    gefahr: true,
+    mitClean: true,
+    cleanHint
   })
 }
 
@@ -852,6 +874,18 @@ const speicher = (n) => {
   if (!n) return ''
   const mb = n / (1024 * 1024)
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`
+}
+
+/** Dateigrößen für Logs/Artefakte — auch unter 1 MB lesbar. */
+function dateiGroesse(bytes) {
+  const n = Number(bytes) || 0
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) {
+    const kb = n / 1024
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`
+  }
+  const mb = n / (1024 * 1024)
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`
 }
 
 function speicherSummeVon(profil) {
@@ -1109,25 +1143,11 @@ function ohneStartHtml(projekt) {
   </div>`
 }
 
-function rendereKopfMeta() {
-  const stop = $('#alle-stoppen')
-  if (!stop) return
-  const laufen = zustand.daten?.summary?.running ?? 0
-  // Nur zeigen, wenn die Aktion Sinn hat — sonst nur Lärm im Kopf.
-  stop.hidden = laufen === 0
-  stop.disabled = laufen === 0
-  stop.title =
-    laufen === 0
-      ? 'Kein Server läuft'
-      : `${laufen} laufende${laufen === 1 ? 'n' : ''} Server stoppen`
-}
-
 function rendereFuss() {
   const fuss = $('#fuss')
   const daten = zustand.daten
   if (!fuss || !daten) return
 
-  rendereKopfMeta()
   const s = daten.summary
   const teil = (html, warn = false) =>
     `<span class="fuss-teil${warn ? ' warn' : ''}">${html}</span>`
@@ -1720,15 +1740,19 @@ function hubLogIstRauschen(text) {
 
 function hubLogDetailAnhaengen(eintrag, text) {
   if (!text || hubLogIstRauschen(text)) return
+  if (eintrag.details.length >= 12) {
+    eintrag.detailsKuerzung = (eintrag.detailsKuerzung ?? 0) + 1
+    return
+  }
   eintrag.details.push(text)
 }
 
 /** Rohzeilen → Ereignisse (neueste zuerst). Sync-Blöcke und Wiederholungen werden verdichtet. */
-function parseHubLog(lines) {
+function parseHubLog(lines, repeats = []) {
   const roh = []
   let aktuell = null
 
-  const neuerEintrag = (zeit, text) => {
+  const neuerEintrag = (zeit, text, anzahl = 1) => {
     const { typ, label } = hubLogTyp(text)
     aktuell = {
       zeit,
@@ -1737,12 +1761,14 @@ function parseHubLog(lines) {
       label,
       projekt: hubLogProjekt(text),
       details: [],
-      anzahl: 1
+      anzahl: Math.max(1, anzahl)
     }
     roh.push(aktuell)
   }
 
-  for (const line of lines ?? []) {
+  for (let idx = 0; idx < (lines ?? []).length; idx++) {
+    const line = lines[idx]
+    const wiederholen = Math.max(1, Number(repeats[idx]) || 1)
     const m = line.match(/^(\d{2}:\d{2}:\d{2})\s+devhub\s+(.*)$/)
     const zeit = m?.[1] ?? ''
     const text = (m ? m[2] : line).trim()
@@ -1776,7 +1802,7 @@ function parseHubLog(lines) {
     }
 
     if (hubLogIstKopf(text) || !aktuell) {
-      neuerEintrag(zeit, text)
+      neuerEintrag(zeit, text, wiederholen)
       continue
     }
 
@@ -1795,7 +1821,7 @@ function parseHubLog(lines) {
       prev.details.length === 0 &&
       e.details.length === 0
     ) {
-      prev.anzahl += 1
+      prev.anzahl += e.anzahl
       if (e.zeit) prev.zeit = e.zeit
       continue
     }
@@ -1812,6 +1838,7 @@ function verlaufTitel(eintrag) {
   if (/^sync\s+\S+$/i.test(t)) return 'Agent-Dateien synchronisiert'
   if (/beendet sich/.test(t)) return 'Hub beendet — Dev-Server laufen weiter'
   if ((m = t.match(/^Übersicht auf\s+(.+)/i))) return `Hub gestartet · ${m[1]}`
+  if ((m = t.match(/^Fehler:\s*(.+)/i))) return m[1]
   return t
 }
 
@@ -1820,12 +1847,20 @@ function verlaufEintragHtml(eintrag) {
     ? zustand.daten?.projects?.find((p) => p.name === eintrag.projekt)
     : null
   const projektLabel = projekt ? anzeigeName(projekt) : eintrag.projekt
-  const details = eintrag.details.length
-    ? `<ul class="verlauf-details">${eintrag.details.map((d) => `<li>${h(d)}</li>`).join('')}</ul>`
+  const detailsListe = [...eintrag.details]
+  if (eintrag.detailsKuerzung) {
+    detailsListe.push(`… ${eintrag.detailsKuerzung} weitere Zeile${eintrag.detailsKuerzung === 1 ? '' : 'n'}`)
+  }
+  const details = detailsListe.length
+    ? `<ul class="verlauf-details">${detailsListe.map((d) => `<li>${h(d)}</li>`).join('')}</ul>`
     : ''
   const projektHtml = eintrag.projekt
     ? `<button type="button" class="verlauf-projekt" data-aktion="detail" data-projekt="${h(eintrag.projekt)}" title="Details öffnen">${h(projektLabel)}</button>`
     : ''
+  const anzahl =
+    eintrag.anzahl > 1
+      ? `<span class="verlauf-anzahl" title="${eintrag.anzahl}× dieselbe Meldung">×${eintrag.anzahl.toLocaleString('de-DE')}</span>`
+      : ''
 
   return `<article class="verlauf-eintrag" data-typ="${h(eintrag.typ)}">
     <div class="verlauf-zeit">${eintrag.zeit ? h(eintrag.zeit) : '—'}</div>
@@ -1834,7 +1869,7 @@ function verlaufEintragHtml(eintrag) {
       <div class="verlauf-kopf-zeile">
         <span class="verlauf-badge">${h(eintrag.label)}</span>
         ${projektHtml}
-        ${eintrag.anzahl > 1 ? `<span class="verlauf-anzahl">×${eintrag.anzahl}</span>` : ''}
+        ${anzahl}
       </div>
       <p class="verlauf-text">${h(verlaufTitel(eintrag))}</p>
       ${details}
@@ -1847,27 +1882,30 @@ async function rendereVerlauf({ ruhig = false } = {}) {
   if (!ziel) return
 
   try {
-    const daten = await api('/api/hub-log?lines=250')
-    const eintraege = parseHubLog(daten.lines ?? [])
+    const daten = await api('/api/hub-log?lines=200')
+    const eintraege = parseHubLog(daten.lines ?? [], daten.repeats ?? [])
     const signatur = [
       daten.file ?? '',
+      daten.bytes ?? 0,
+      daten.totalLines ?? 0,
       daten.lines?.length ?? 0,
       daten.lines?.[0] ?? '',
-      daten.lines?.at?.(-1) ?? ''
+      daten.lines?.at?.(-1) ?? '',
+      (daten.repeats ?? []).join(',')
     ].join('\0')
 
-    if (ruhig && signatur === zustand.verlauf.signatur && ziel.querySelector('.verlauf-liste')) {
+    if (ruhig && signatur === zustand.verlauf.signatur && ziel.querySelector('.verlauf-panel')) {
       return
     }
 
     zustand.verlauf = { datei: daten.file ?? null, eintraege, signatur }
 
-    const meta = daten.file
-      ? `<span class="verlauf-datei">
-          <span class="meta" title="${h(daten.file)}">${h(daten.file)}</span>
-          ${pfadAktionenHtml(daten.file, { kompakt: true })}
-        </span>`
-      : ''
+    const groesse = daten.bytes != null ? dateiGroesse(daten.bytes) : ''
+    const rohzeilen = daten.totalLines ?? 0
+    const untertitel =
+      rohzeilen > eintraege.length
+        ? `${eintraege.length.toLocaleString('de-DE')} Ereignisse · ${rohzeilen.toLocaleString('de-DE')} Zeilen in der Logdatei`
+        : 'Hub-Aktionen, Sync und Meldungen'
 
     const liste = eintraege.length
       ? `<div class="verlauf-liste">${eintraege.map(verlaufEintragHtml).join('')}</div>`
@@ -1876,18 +1914,52 @@ async function rendereVerlauf({ ruhig = false } = {}) {
           <p>Sync, Slot-Vergabe und ähnliche Aktionen erscheinen hier automatisch.</p>
         </div>`
 
+    const dateiMeta = daten.file
+      ? `<span class="verlauf-datei">
+          <span class="meta mono" title="${h(daten.file)}">${h(daten.file)}</span>
+          ${pfadAktionenHtml(daten.file, { kompakt: true })}
+        </span>`
+      : ''
+
     ziel.innerHTML = `
       ${seitenKopfHtml({
         titelHtml: seitenTitelHtml([{ label: 'Verlauf' }]),
-        untertitel: 'Hub-Aktionen und Meldungen',
-        meta: `${eintraege.length ? `<span class="verlauf-count">${eintraege.length} Einträge</span>` : ''}${meta}`
+        untertitel,
+        meta: `<button type="button" class="knopf gefahr" data-aktion="verlauf-leeren" ${rohzeilen ? '' : 'disabled'} title="Hub-Logdatei leeren">Log leeren</button>`
       })}
-      ${liste}`
+      <div class="verlauf-panel">
+        <div class="verlauf-leiste">
+          <div class="verlauf-leiste-meta">
+            ${eintraege.length ? `<span class="verlauf-count">${eintraege.length.toLocaleString('de-DE')} Einträge</span>` : ''}
+            ${groesse ? `<span class="verlauf-count leise">${groesse}</span>` : ''}
+            ${dateiMeta}
+          </div>
+        </div>
+        ${liste}
+      </div>`
   } catch (err) {
     if (!ruhig) {
-      ziel.innerHTML = `<div class="leer-box"><strong>Verlauf nicht lesbar</strong><p>${h(err.message)}</p></div>`
+      ziel.innerHTML = `<div class="leer-box panel"><strong>Verlauf nicht lesbar</strong><p>${h(err.message)}</p></div>`
     }
   }
+}
+
+async function leereVerlauf() {
+  const wahl = await frageBestaetigung({
+    titel: 'Hub-Log leeren?',
+    text: 'Die Datei wird geleert. Laufende Dev-Server sind davon nicht betroffen.',
+    liste: [
+      'Sync-, Slot- und Startmeldungen verschwinden aus dem Verlauf',
+      'Anschließend bleibt nur der Hinweis „Verlauf geleert“'
+    ],
+    okLabel: 'Log leeren',
+    gefahr: true
+  })
+  if (!wahl.ok) return
+  await api('/api/hub-log', { method: 'DELETE' })
+  zustand.verlauf.signatur = ''
+  zeigeOk('Verlauf geleert')
+  await rendereVerlauf()
 }
 
 // ------------------------------------------------------------------ Routing
@@ -2470,17 +2542,6 @@ function baueNavBefehle() {
       ausfuehren: () => setzeTheme(theme === 'light' ? 'dark' : 'light')
     })
   )
-  liste.push(
-    befehlEintrag({
-      id: 'nav:alle-stoppen',
-      label: 'Alle Server stoppen',
-      hint: daten?.summary?.running ? `${daten.summary.running} laufen` : 'nichts läuft',
-      gruppe: 'Navigation',
-      keywords: ['alle', 'stoppen', 'down', 'kill'],
-      gefahr: true,
-      ausfuehren: () => aktionAusfuehren('alle-stoppen')
-    })
-  )
   return liste
 }
 
@@ -3031,10 +3092,10 @@ async function aktionAusfuehren(aktion, kontext = {}, knopf = null) {
         })
       )
     }
-    case 'alle-stoppen':
-      return handle(knopf, () => api('/api/down-all', { method: 'POST', body: '{}' }))
     case 'hub-log':
       return oeffneVerlauf()
+    case 'verlauf-leeren':
+      return leereVerlauf()
     case 'sync-projekt':
       return handle(knopf, async () => {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })

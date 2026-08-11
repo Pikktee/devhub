@@ -491,29 +491,38 @@ body::before {
   z-index: 40;
 }
 
+/* Gemeinsame Panel-Fläche (wie Einstellungs-Sektionen): weich, ohne schweren Schatten. */
+.panel,
+.liste,
+.karte,
+.enthüllung,
+.verlauf-panel,
+.einst-sektion {
+  border: 1px solid color-mix(in srgb, var(--rand) 90%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--flaeche) 42%, transparent);
+  box-shadow: none;
+}
 .liste {
-  border: 1px solid var(--rand);
-  border-radius: var(--radius);
-  background: var(--flaeche);
-  box-shadow: var(--schatten);
   animation: einblenden 280ms var(--ease) both;
   /* kein overflow:hidden — sonst werden absolute ⋯-Menüs am Rand abgeschnitten */
 }
 .liste > :first-child {
-  border-top-left-radius: calc(var(--radius) - 1px);
-  border-top-right-radius: calc(var(--radius) - 1px);
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
 }
 .liste > :last-child {
-  border-bottom-left-radius: calc(var(--radius) - 1px);
-  border-bottom-right-radius: calc(var(--radius) - 1px);
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
 }
 .gruppe {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 9px 16px;
-  background: var(--bg-tief);
+  background: color-mix(in srgb, var(--bg-tief) 55%, transparent);
   color: var(--text-still);
   font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
-  border-bottom: 1px solid var(--rand); border-top: 1px solid var(--rand);
+  border-bottom: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
 }
 .gruppe:first-child,
 .liste-kopf + .gruppe,
@@ -634,8 +643,8 @@ body::before {
 .liste-kopf > :last-child { min-width: 0; justify-self: end; }
 .liste-kopf {
   padding: 8px 16px;
-  border-bottom: 1px solid var(--rand);
-  background: color-mix(in srgb, var(--bg-tief) 55%, var(--flaeche));
+  border-bottom: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
+  background: color-mix(in srgb, var(--flaeche) 28%, transparent);
   color: var(--text-still);
   font-size: 11px;
   font-weight: 650;
@@ -949,26 +958,23 @@ a.knopf.github-aktion {
   color: var(--text-still);
 }
 .karte {
-  border: 1px solid var(--rand);
-  border-radius: var(--radius);
-  background: var(--flaeche);
   margin-top: 14px;
-  box-shadow: var(--schatten);
+  overflow: clip;
 }
 .karte > :first-child {
-  border-top-left-radius: calc(var(--radius) - 1px);
-  border-top-right-radius: calc(var(--radius) - 1px);
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
 }
 .karte > :last-child {
-  border-bottom-left-radius: calc(var(--radius) - 1px);
-  border-bottom-right-radius: calc(var(--radius) - 1px);
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
 }
 .server-karte.haupt { margin-top: 0; }
 .karte-kopf {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--rand);
-  background: var(--flaeche-hoch);
+  border-bottom: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
+  background: color-mix(in srgb, var(--flaeche) 28%, transparent);
 }
 .karte-kopf h3 { margin: 0; font-size: 13.5px; font-weight: 650; }
 .karte-kopf .sub { color: var(--text-still); font-size: 12.5px; font-weight: 400; margin-left: 8px; }
@@ -1040,11 +1046,10 @@ a.knopf {
 
 .enthüllung {
   margin-top: 12px;
-  border: 1px solid var(--rand);
-  border-radius: var(--radius);
-  background: var(--flaeche);
-  overflow: hidden;
-  box-shadow: var(--schatten);
+  overflow: clip;
+}
+.enthüllung[open] {
+  background: color-mix(in srgb, var(--flaeche) 58%, transparent);
 }
 .enthüllung > summary {
   display: flex;
@@ -1054,7 +1059,7 @@ a.knopf {
   padding: 13px 16px;
   cursor: pointer;
   list-style: none;
-  background: var(--flaeche-hoch);
+  background: transparent;
   user-select: none;
   transition: background 140ms var(--ease);
 }
@@ -1094,8 +1099,8 @@ a.knopf {
   white-space: nowrap;
 }
 .enthüllung-koerper {
-  border-top: 1px solid var(--rand);
-  background: var(--flaeche);
+  border-top: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
+  background: transparent;
 }
 .enthüllung-koerper > .quelle {
   border-radius: 0;
@@ -1183,12 +1188,11 @@ pre.quelle {
 }
 pre.log {
   margin: 0; padding: 14px 16px;
-  background: var(--bg-tief);
-  border: 1px solid var(--rand);
-  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--flaeche) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rand) 90%, transparent);
+  border-radius: 12px;
   overflow-x: auto; line-height: 1.7; color: var(--text-leise);
   max-height: min(560px, 70dvh); white-space: pre-wrap; word-break: break-word;
-  box-shadow: var(--schatten);
   font-family: var(--mono);
 }
 pre.log .z { color: var(--text-still); }
@@ -1198,13 +1202,38 @@ pre.log .er { color: var(--rot); }
 pre.log .hl { color: var(--text); }
 
 /* ---------- Verlauf ---------- */
+.verlauf-panel {
+  overflow: clip;
+  animation: einblenden 280ms var(--ease) both;
+  max-width: 52rem;
+}
+.verlauf-leiste {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
+}
+.verlauf-leiste-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .verlauf-count {
   font: 500 12px/1 var(--mono);
   color: var(--text-leise);
-  background: var(--flaeche);
-  border: 1px solid var(--rand);
+  background: color-mix(in srgb, var(--flaeche) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rand) 85%, transparent);
   border-radius: 999px;
   padding: 4px 10px;
+}
+.verlauf-count.leise {
+  color: var(--text-still);
+  background: transparent;
 }
 .verlauf-datei {
   display: inline-flex;
@@ -1219,6 +1248,7 @@ pre.log .hl { color: var(--text); }
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+  color: var(--text-still);
 }
 .verlauf-datei .pfad-aktionen { opacity: 0.55; }
 .verlauf-datei:hover .pfad-aktionen,
@@ -1228,22 +1258,16 @@ pre.log .hl { color: var(--text); }
   display: flex;
   flex-direction: column;
   gap: 0;
-  border: 1px solid var(--rand);
-  border-radius: var(--radius);
-  background: var(--flaeche);
-  box-shadow: var(--schatten);
-  overflow: hidden;
-  animation: einblenden 280ms var(--ease) both;
 }
 .verlauf-eintrag {
   display: grid;
   grid-template-columns: 64px 20px minmax(0, 1fr);
   gap: 0 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--rand) 80%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--rand) 70%, transparent);
 }
 .verlauf-eintrag:last-child { border-bottom: 0; }
-.verlauf-eintrag:hover { background: color-mix(in srgb, var(--flaeche-hover) 70%, transparent); }
+.verlauf-eintrag:hover { background: color-mix(in srgb, var(--flaeche-hover) 55%, transparent); }
 .verlauf-zeit {
   font: 500 12px/1.4 var(--mono);
   color: var(--text-still);
@@ -1263,7 +1287,7 @@ pre.log .hl { color: var(--text); }
   bottom: -14px;
   left: 50%;
   width: 1px;
-  background: var(--rand);
+  background: color-mix(in srgb, var(--rand) 85%, transparent);
   transform: translateX(-50%);
 }
 .verlauf-eintrag:last-child .verlauf-spur::before { bottom: 50%; }
@@ -1274,7 +1298,7 @@ pre.log .hl { color: var(--text); }
   height: 9px;
   border-radius: 50%;
   background: var(--rand-stark);
-  box-shadow: 0 0 0 3px var(--flaeche);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--flaeche) 70%, var(--bg));
 }
 .verlauf-eintrag[data-typ="sync"] .verlauf-punkt,
 .verlauf-eintrag[data-typ="adopt"] .verlauf-punkt,
@@ -1413,9 +1437,6 @@ pre.log .hl { color: var(--text); }
 
 .einst-sektion {
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--rand) 90%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--flaeche) 42%, transparent);
   overflow: clip;
 }
 .einst-sektion[open] {
@@ -1898,6 +1919,13 @@ pre.log .hl { color: var(--text); }
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   padding: 48px 24px;
   text-align: center;
+}
+.leer-box.panel,
+.verlauf-panel > .leer-box {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .leer-box strong {
   color: var(--text); font-size: 15px; font-weight: 650;
