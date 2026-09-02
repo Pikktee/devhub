@@ -162,6 +162,33 @@ der URL, damit HMR (Vite u. a.) funktioniert. Getrennte Hostnamen bedeuten auc
 getrennte Cookies - zwei Instanzen desselben Projekts überschreiben sich nicht
 mehr die Anmeldung.
 
+### Im lokalen Netzwerk (Handy, Tablet, zweiter Rechner)
+
+`*.localhost` gilt nur auf diesem Rechner - Browser lösen die Endung fest auf
+Loopback auf, ein anderes Gerät erreicht diese Namen nie. Für den Blick vom Handy
+gibt es in den Einstellungen unter **Hub & Netzwerk** den Schalter
+**Im Netzwerk freigeben** (`networkAccess`). Er ändert zweierlei:
+
+- Abgeleitete Startkommandos binden auf alle Interfaces (`--host 0.0.0.0`, bei
+  Next `--hostname`, sonst `HOST`). Ohne das lauscht Vite nur auf Loopback.
+- Jeder Prozess bekommt eine zweite Adresse `http://<adresse>:<port>`, und das
+  Frontend bekommt seine API unter derselben Adresse statt unter `127.0.0.1` -
+  im fremden Browser wäre Loopback sonst das Gerät des Betrachters.
+
+Die Adresse wird gemessen (die IPv4 dieses Rechners), nicht gespeichert. Wer
+lieber einen Namen sieht, trägt ihn unter **Adresse im Netz** ein
+(`networkHost`), z. B. den Bonjour-Namen `<rechner>.local`. **Achtung:** Vite
+lässt ungefragt nur IP-Adressen und `localhost` durch; für einen Namen braucht
+das Projekt `server.allowedHosts`, Next entsprechend `allowedDevOrigins`.
+
+Eigene Startkommandos in `devhub.json` rührt der Hub nicht an - dort setzt man
+die Bindung selbst über den Platzhalter `{bindHost}`. Ob es geklappt hat, wird
+gemessen: `devhub up` und die Übersicht zeigen „nur lokal“, wenn der Port auf der
+Netzadresse nicht antwortet, und `devhub doctor` listet solche Prozesse auf.
+
+**Der Hub selbst bleibt lokal.** Er zeigt Regeln, Skills und Sitzungsspeicher und
+lauscht weiterhin nur auf `127.0.0.1`; der Schalter ändert daran nichts.
+
 ---
 
 ## Coding-Agenten
@@ -228,7 +255,7 @@ Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle):
 }
 ```
 
-Platzhalter: `{port}`, `{host}`, `{url}`, `{project}`, `{profile}`, `{path}`  
+Platzhalter: `{port}`, `{host}`, `{bindHost}`, `{url}`, `{backendUrl}`, `{project}`, `{profile}`, `{path}`  
 (deutsche Schlüsselnamen werden ebenso akzeptiert.)
 
 Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)
@@ -277,6 +304,8 @@ In `registry.json` unter `settings` u. a.:
 | `roots` | Projekt-Wurzelverzeichnisse | `~/Dev` (absolut) |
 | `hubPort` | Port der Hub-Oberfläche | `4000` |
 | `domainSuffix` | Domain für Projekt-URLs | `localhost` |
+| `networkAccess` | Dev-Server im lokalen Netz erreichbar | `false` |
+| `networkHost` | Name statt gemessener IP für Netz-URLs | leer (gemessen) |
 | `editor` | Kommando für „Im Editor öffnen“ | `cursor` |
 | `readyTimeoutMs` | Wartezeit auf Server-Port | `60000` |
 | `showGlobalAgentContext` | Globale Agent-Dateien in der UI | `true` |

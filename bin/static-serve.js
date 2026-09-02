@@ -9,6 +9,8 @@ import { timestamp } from '../src/util/fmt.js'
 
 const [dir, portArg] = process.argv.slice(2)
 const port = Number(portArg)
+// Standard bleibt Loopback; erst die Netzwerk-Freigabe des Hubs setzt HOST.
+const host = process.env.HOST || '127.0.0.1'
 
 if (!dir || !Number.isInteger(port)) {
   console.error('Aufruf: static-serve.js <ordner> <port>')
@@ -22,8 +24,8 @@ server.on('error', (err) => {
   process.exit(1)
 })
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`${timestamp()} devhub  liefert ${dir} auf ${port} aus`)
+server.listen(port, host, () => {
+  console.log(`${timestamp()} devhub  liefert ${dir} auf ${host}:${port} aus`)
 })
 
 for (const signal of ['SIGTERM', 'SIGINT']) {

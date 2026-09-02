@@ -17,6 +17,9 @@ Dev-Server.
   entscheidet die Port-Probe. Eine PID-Datei zu einem toten Prozess ist die
   häufigste Lüge in solchen Werkzeugen - dieser Fehler darf nicht zurückkommen.
 - **Gestoppt wird die Prozessgruppe**, nie ein einzelner Prozess.
+- **Der Hub bleibt auf `127.0.0.1`.** Er zeigt Regeln, Skills und
+  Sitzungsspeicher. Die Einstellung `networkAccess` gibt nur die **Dev-Server**
+  ins LAN frei, nicht die Oberfläche - das bitte nicht „vereinfachen“.
 - **Kommentare erklären, warum**, nicht was. Wenn eine Zeile nur wiederholt, was
   danebensteht, gehört sie weg.
 

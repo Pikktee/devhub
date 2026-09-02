@@ -12,6 +12,7 @@ import { serviceStatus } from '../service.js'
 import { instance } from '../paths.js'
 import { clearHubLog, recordEvent, readHubLogTail } from '../history.js'
 import { assertOpenablePath, openLocalPath } from '../open.js'
+import { bonjourHost, lanAddress, networkHostFor } from '../net.js'
 
 async function projectPayload(registry, project, { withMemory = false } = {}) {
   const profiles = []
@@ -67,6 +68,7 @@ export async function overview({ withMemory = false } = {}) {
       port: registry.settings.hubPort,
       instance,
       domainSuffix: registry.settings.domainSuffix,
+      network: { access: Boolean(registry.settings.networkAccess), host: networkHostFor(registry.settings) },
       editor: registry.settings.editor ?? 'cursor',
       service: serviceStatus(),
       roots: registry.settings.roots
@@ -334,7 +336,12 @@ export const routes = [
     pattern: /^\/api\/settings$/,
     handler: async () => {
       const registry = registryStore.load()
-      return registryStore.publicSettings(registry.settings)
+      // Gemessen statt gespeichert: die Oberfläche soll zeigen, was gerade gilt.
+      return {
+        ...registryStore.publicSettings(registry.settings),
+        networkAddress: lanAddress(),
+        bonjourHost: await bonjourHost()
+      }
     }
   },
   {
@@ -351,6 +358,7 @@ export const routes = [
         lines: [
           `Wurzeln: ${settings.roots.join(', ')}`,
           `Hub-Port ${settings.hubPort} · ${settings.domainSuffix}`,
+          `Netzwerk-Freigabe: ${settings.networkAccess ? `an (${networkHostFor(settings) ?? 'keine Adresse gefunden'})` : 'aus'}`,
           `Editor ${settings.editor}`,
           `Agent-Kontext global: ${settings.showGlobalAgentContext ? 'an' : 'aus'}`,
           `Timeout ${Math.round(settings.readyTimeoutMs / 1000)}s`,

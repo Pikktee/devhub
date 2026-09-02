@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { readJson } from './util/json.js'
 import { portFor, slugifyLabel, urlForRole } from './ports.js'
+import { BIND_ALL, networkUrlFor } from './net.js'
 import { repoRoot } from './paths.js'
 import { githubInfoFor } from './git.js'
 
@@ -30,6 +31,17 @@ function frameworkFor(pkg) {
   if (deps.vite) return 'vite'
   if (deps['react-scripts']) return 'cra'
   return pkg ? 'node' : null
+}
+
+/**
+ * Ohne Host-Flag lauschen Vite und Verwandte nur auf Loopback - aus dem LAN
+ * kommt dann niemand an. Next kennt `--host` nicht, dort heißt es `--hostname`;
+ * alles Übrige liest die Umgebungsvariable HOST.
+ */
+function hostArgsFor(framework) {
+  if (framework === 'next') return ['--hostname', BIND_ALL]
+  if (['vite', 'astro', 'nuxt', 'svelte-kit'].includes(framework)) return ['--host', BIND_ALL]
+  return []
 }
 
 function composeFileIn(dir) {
@@ -153,7 +165,8 @@ function servePublicDir(scriptBody) {
 }
 
 /** Node-API unter server/ (Maptale) oder uv-start neben web/ (Schnappster). */
-function inferApiSpec(dir) {
+function inferApiSpec(dir, { network = false } = {}) {
+  const bindEnv = network ? { HOST: BIND_ALL } : {}
   const serverPkg = readJson(join(dir, 'server', 'package.json'), null)
   if (serverPkg?.scripts?.dev || serverPkg?.scripts?.start) {
     const script = serverPkg.scripts.dev ? 'dev' : 'start'
@@ -162,7 +175,7 @@ function inferApiSpec(dir) {
       name: 'api',
       role: 'backend',
       cwd: 'server',
-      env: { PORT: '{port}' },
+      env: { PORT: '{port}', ...bindEnv },
       cmd: [pm, 'run', script]
     })
   }
@@ -177,6 +190,7 @@ function inferApiSpec(dir) {
       name: 'api',
       role: 'backend',
       cwd: '.',
+      env: bindEnv,
       cmd: ['uv', 'run', 'start', '--prod', '--skip-tests', '--port', '{port}']
     })
   }
@@ -184,7 +198,7 @@ function inferApiSpec(dir) {
   return null
 }
 
-function inferProfiles(dir, stack) {
+function inferProfiles(dir, stack, { network = false } = {}) {
   if (stack.kind === 'node' && stack.script) {
     const node = findNodeDir(dir)
     const scriptBody = node?.pkg?.scripts?.[stack.script]
@@ -198,23 +212,28 @@ function inferProfiles(dir, stack) {
             name: 'web',
             role: 'frontend',
             runner: 'static',
+            env: network ? { HOST: BIND_ALL } : {},
             dir: rel
           })
         ]
       }
     }
 
-    const api = inferApiSpec(dir)
+    const api = inferApiSpec(dir, { network })
     const strict = STRICT_PORT_FRAMEWORKS.has(stack.framework)
     const portArgs = ['--port', '{port}']
     if (strict) portArgs.push('--strictPort')
+    if (network) portArgs.push(...hostArgsFor(stack.framework))
     const cmd = packageRunCmd(stack.packageManager, stack.script, portArgs)
 
     // Frontend kennt die API-Adresse oft fest (8787/8000) - auf den Slot umbiegen.
+    // {backendUrl} statt fester Loopback-Adresse: im Netzmodus läuft die Seite in
+    // einem fremden Browser, für den 127.0.0.1 das eigene Gerät wäre.
     const frontendEnv = { PORT: '{port}' }
+    if (network) frontendEnv.HOST = BIND_ALL
     if (api) {
-      frontendEnv.MAPTALE_API = 'http://127.0.0.1:{backendPort}'
-      frontendEnv.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:{backendPort}'
+      frontendEnv.MAPTALE_API = '{backendUrl}'
+      frontendEnv.NEXT_PUBLIC_API_URL = '{backendUrl}'
     }
 
     const web = normalizeSpec({
@@ -236,10 +255,14 @@ function inferProfiles(dir, stack) {
     }
   }
   if (stack.kind === 'static') {
-    return { default: [normalizeSpec({ name: 'web', runner: 'static', role: 'frontend', dir: '.' })] }
+    return {
+      default: [
+        normalizeSpec({ name: 'web', runner: 'static', role: 'frontend', env: network ? { HOST: BIND_ALL } : {}, dir: '.' })
+      ]
+    }
   }
   if (stack.kind === 'python') {
-    return inferPythonProfiles(dir)
+    return inferPythonProfiles(dir, { network })
   }
   return null
 }
@@ -258,7 +281,7 @@ function hasPythonVenv(dir) {
   return existsSync(join(dir, '.venv', 'bin', 'python')) || existsSync(join(dir, 'venv', 'bin', 'python'))
 }
 
-function inferPythonProfiles(dir) {
+function inferPythonProfiles(dir, { network = false } = {}) {
   const entry = PYTHON_ENTRYPOINTS.find((name) => existsSync(join(dir, name)))
   if (!entry) return null
   return {
@@ -267,7 +290,7 @@ function inferPythonProfiles(dir) {
         name: 'web',
         role: 'frontend',
         cwd: '.',
-        env: { PORT: '{port}' },
+        env: { PORT: '{port}', ...(network ? { HOST: BIND_ALL } : {}) },
         cmd: [pythonInterpreter(dir), entry]
       })
     ]
@@ -537,7 +560,7 @@ export function describeProject(registry, name) {
   }
 
   if (source === 'unbekannt') {
-    const inferred = inferProfiles(base.path, stack)
+    const inferred = inferProfiles(base.path, stack, { network: Boolean(registry.settings.networkAccess) })
     if (inferred) {
       profiles = inferred
       source = 'abgeleitet'
@@ -574,7 +597,8 @@ export function describeProject(registry, name) {
       return {
         ...spec,
         port,
-        url: port === undefined ? undefined : urlForRole(spec.role, hostLabel, profile, port, suffix)
+        url: port === undefined ? undefined : urlForRole(spec.role, hostLabel, profile, port, suffix),
+        networkUrl: networkUrlFor(registry.settings, port)
       }
     })
   }

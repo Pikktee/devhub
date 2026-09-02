@@ -308,6 +308,10 @@ function einstellungenKlon(daten) {
     roots: [...(daten.roots ?? [])],
     hubPort: daten.hubPort,
     domainSuffix: daten.domainSuffix,
+    networkAccess: Boolean(daten.networkAccess),
+    networkHost: daten.networkHost ?? '',
+    networkAddress: daten.networkAddress ?? null,
+    bonjourHost: daten.bonjourHost ?? null,
     editor: daten.editor,
     showGlobalAgentContext: Boolean(daten.showGlobalAgentContext),
     readyTimeoutMs: daten.readyTimeoutMs,
@@ -321,6 +325,8 @@ function einstellungenDirty() {
   return (
     geladen.hubPort !== draft.hubPort ||
     geladen.domainSuffix !== draft.domainSuffix ||
+    geladen.networkAccess !== draft.networkAccess ||
+    geladen.networkHost !== draft.networkHost ||
     geladen.editor !== draft.editor ||
     geladen.showGlobalAgentContext !== draft.showGlobalAgentContext ||
     geladen.readyTimeoutMs !== draft.readyTimeoutMs ||
@@ -371,6 +377,24 @@ function seitenKopfHtml({ titelHtml, untertitel = '', meta = '', aktionen = '', 
 const THEME_ICON = {
   dark: `<svg class="einst-theme-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.2 9.1A5.6 5.6 0 0 1 6.9 2.8 5.7 5.7 0 1 0 13.2 9.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   light: `<svg class="einst-theme-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.6" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.75v1.4M8 12.85v1.4M1.75 8h1.4M12.85 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`
+}
+
+function hubSektionMeta(draft) {
+  return draft.networkAccess ? `Port ${h(draft.hubPort)} · im Netz` : `Port ${h(draft.hubPort)}`
+}
+
+/** Ein Name ist hübscher als die Nummer, kostet aber einen Eintrag im Projekt -
+ *  Vite lässt nur IPs und localhost ungefragt durch. Das gehört hierhin, nicht
+ *  in die Fehlersuche nach dem ersten „Blocked request“. */
+function netzHilfeHtml(draft) {
+  if (!draft.networkAccess) return 'Erst mit der Freigabe oben.'
+  const gemessen = draft.networkAddress
+    ? `Leer = gemessen: <span class="mono">${h(draft.networkAddress)}</span>.`
+    : 'Leer = gemessene Adresse; im Moment ist keine zu finden.'
+  const bonjour = draft.bonjourHost
+    ? ` Ein Name wie <span class="mono">${h(draft.bonjourHost)}</span> braucht in Vite-Projekten <span class="mono">server.allowedHosts</span>.`
+    : ''
+  return `${gemessen}${bonjour}`
 }
 
 function rendereEinstellungen() {
@@ -455,7 +479,7 @@ function rendereEinstellungen() {
       ${einstSektionHtml({
         id: 'hub',
         titel: 'Hub &amp; Netzwerk',
-        meta: `Port ${h(draft.hubPort)}`,
+        meta: hubSektionMeta(draft),
         offen: offen.hub,
         koerper: `<div class="einst-raster">
           <label class="einst-feld">
@@ -469,6 +493,19 @@ function rendereEinstellungen() {
             <span class="einst-hilfe">Projekte: <span class="mono">name.${h(draft.domainSuffix)}:…</span></span>
           </label>
         </div>
+        <label class="einst-schalter">
+          <span class="einst-schalter-text">
+            <span class="einst-zeile-name">Im Netzwerk freigeben</span>
+            <span class="einst-zeile-hilfe">Dev-Server lauschen dann auf allen Interfaces und bekommen eine zweite Adresse fürs LAN. Laufende Projekte einmal neu starten. Der Hub selbst bleibt lokal.</span>
+          </span>
+          <input type="checkbox" name="networkAccess" ${draft.networkAccess ? 'checked' : ''}>
+          <span class="einst-schalter-ui" aria-hidden="true"></span>
+        </label>
+        <label class="einst-feld">
+          <span class="einst-label">Adresse im Netz</span>
+          <input type="text" name="networkHost" class="einst-input mono" value="${h(draft.networkHost)}" placeholder="${h(draft.networkAddress ?? 'gemessene Adresse')}" autocomplete="off" spellcheck="false" ${draft.networkAccess ? '' : 'disabled'}>
+          <span class="einst-hilfe" data-einst-hilfe="netz">${netzHilfeHtml(draft)}</span>
+        </label>
         ${portHinweis}`
       })}
 
@@ -590,6 +627,8 @@ function einstellungenAusForm(form) {
     hubPort,
     domainSuffix,
     editor,
+    networkAccess: Boolean(form.networkAccess?.checked),
+    networkHost: String(form.networkHost?.value ?? '').trim().toLowerCase(),
     showGlobalAgentContext: Boolean(form.showGlobalAgentContext?.checked),
     readyTimeoutMs: Math.round(readyTimeoutSek * 1000)
   }
@@ -623,7 +662,15 @@ function syncEinstellungenDraftAusForm() {
     suffixHilfe.innerHTML = `Projekte: <span class="mono">name.${suffix}:…</span>`
   }
   const hubMeta = form.querySelector('[data-einst-sektion="hub"] .einst-sektion-meta')
-  if (hubMeta) hubMeta.textContent = `Port ${form.hubPort?.value || '-'}`
+  if (hubMeta) {
+    hubMeta.textContent = form.networkAccess?.checked
+      ? `Port ${form.hubPort?.value || '-'} · im Netz`
+      : `Port ${form.hubPort?.value || '-'}`
+  }
+  const netzFeld = form.querySelector('[name="networkHost"]')
+  if (netzFeld) netzFeld.disabled = !form.networkAccess?.checked
+  const netzHilfe = form.querySelector('[data-einst-hilfe="netz"]')
+  if (netzHilfe) netzHilfe.innerHTML = netzHilfeHtml(zustand.einstellungen.draft)
   const werkMeta = form.querySelector('[data-einst-sektion="werkzeuge"] .einst-sektion-meta')
   if (werkMeta) werkMeta.textContent = String(form.editor?.value || 'Editor').trim() || 'Editor'
   const agentMeta = form.querySelector('[data-einst-sektion="agenten"] .einst-sektion-meta')
@@ -1331,6 +1378,19 @@ function zustandLabel(profil) {
   return profil.state === 'gestoppt' ? 'gestoppt' : profil.state
 }
 
+/**
+ * Zweite Adresse nur bei eingeschalteter Freigabe - und nur als Link, wenn der
+ * Port dort auch wirklich antwortet. Ein toter Link wäre schlimmer als keiner.
+ */
+function netzAdresseHtml(proc) {
+  if (!proc.networkUrl) return ''
+  const kurz = proc.networkUrl.replace(/^https?:\/\//, '')
+  if (!proc.listening) return ''
+  return proc.networkListening
+    ? `<span class="adr-netz"><span class="adr-netz-marke">im Netz</span><a class="adr" href="${h(proc.networkUrl)}" target="_blank" rel="noreferrer">${h(kurz)}</a></span>`
+    : `<span class="adr-netz"><span class="adr-netz-marke">nur lokal</span><span class="adr aus">${h(kurz)} antwortet nicht</span></span>`
+}
+
 function prozessHtml(projekt, profil, proc) {
   const meta = [
     proc.port != null ? `Port ${proc.port}` : null,
@@ -1351,6 +1411,7 @@ function prozessHtml(projekt, profil, proc) {
           ? `<a class="adr${proc.listening ? '' : ' aus'}" href="${h(proc.url)}" target="_blank" rel="noreferrer">${h(proc.url.replace(/^https?:\/\//, ''))}</a>`
           : '<span class="adr aus">keine Adresse</span>'
       }
+      ${netzAdresseHtml(proc)}
       ${meta.length ? `<span class="meta">${h(meta.join(' · '))}</span>` : ''}
       ${einstiegeHtml(proc, { listening: proc.listening })}
     </div>

@@ -742,6 +742,19 @@ a.knopf.github-aktion {
 }
 .adr:hover { text-decoration: underline; text-underline-offset: 2px; }
 .adr.aus { color: var(--text-still); pointer-events: none; font-family: var(--font); }
+.adr-netz {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.adr-netz-marke {
+  color: var(--text-still);
+  font-size: 11.5px;
+  font-weight: 500;
+  flex: none;
+}
+.adr-netz .adr { font-size: 12.5px; }
 .adr-zelle {
   display: flex;
   flex-wrap: wrap;

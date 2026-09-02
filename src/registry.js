@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS = {
   roots: [join(homedir(), 'Dev')],
   hubPort: 4000,
   domainSuffix: 'localhost',
+  networkAccess: false,
+  networkHost: '',
   editor: 'cursor',
   showGlobalAgentContext: true,
   readyTimeoutMs: 60000
@@ -28,6 +30,8 @@ export function publicSettings(settings = {}) {
     roots: [...(merged.roots ?? DEFAULT_SETTINGS.roots)],
     hubPort: merged.hubPort,
     domainSuffix: merged.domainSuffix,
+    networkAccess: Boolean(merged.networkAccess),
+    networkHost: merged.networkHost ?? '',
     editor: merged.editor ?? DEFAULT_SETTINGS.editor,
     showGlobalAgentContext: Boolean(merged.showGlobalAgentContext),
     readyTimeoutMs: merged.readyTimeoutMs ?? DEFAULT_SETTINGS.readyTimeoutMs,
@@ -80,6 +84,18 @@ export function applySettingsPatch(registry, patch = {}) {
       throw Object.assign(new Error('Domain-Suffix ist ungültig (z. B. localhost)'), { status: 400 })
     }
     next.domainSuffix = suffix
+  }
+
+  if (patch.networkAccess !== undefined) {
+    next.networkAccess = Boolean(patch.networkAccess)
+  }
+
+  if (patch.networkHost !== undefined) {
+    const host = String(patch.networkHost).trim().toLowerCase()
+    if (host && !/^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$/.test(host)) {
+      throw Object.assign(new Error('Netzwerk-Host ist ungültig (Name oder IP, z. B. 192.168.178.20)'), { status: 400 })
+    }
+    next.networkHost = host
   }
 
   if (patch.editor !== undefined) {

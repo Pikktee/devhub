@@ -5,6 +5,7 @@ import * as registryStore from './registry.js'
 import * as stateStore from './state.js'
 import { describeProject } from './discovery.js'
 import { hostFor, portFor, urlFor, urlForRole } from './ports.js'
+import { bindHostFor, networkHostFor } from './net.js'
 import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, probePort } from './probe.js'
 import { logLine, openLog, startProcess, stopGroup } from './runners/process.js'
 import { composeDown, composeServices, composeUp, dockerAvailable } from './runners/compose.js'
@@ -45,9 +46,12 @@ function varsFor({ project, profile, spec, port, registry, slot }) {
     profil: profile,
     profile,
     host: hostFor(label, profile, suffix),
+    bindHost: bindHostFor(registry.settings),
     url: urlForRole(spec.role, label, profile, port, suffix),
     frontendUrl: urlFor(label, profile, frontendPort, suffix),
-    backendUrl: `http://127.0.0.1:${backendPort}`,
+    // Im Netzmodus läuft die Seite in einem fremden Browser - dort wäre
+    // 127.0.0.1 das Gerät des Betrachters, nicht dieser Rechner.
+    backendUrl: `http://${networkHostFor(registry.settings) ?? '127.0.0.1'}:${backendPort}`,
     rolle: spec.role,
     role: spec.role,
     pfad: project.path,
@@ -64,6 +68,23 @@ async function waitReady({ port, pid, timeoutMs, onTick }) {
     await new Promise((r) => setTimeout(r, 300))
   }
   return { ready: false, reason: 'zeitüberschreitung' }
+}
+
+/**
+ * Der Netzmodus behauptet nichts, er misst: lauscht der Port auch auf der
+ * Adresse im LAN? Ein Server, der nur auf Loopback hört, ist vom Handy aus
+ * nicht erreichbar - das soll im Log stehen, nicht erst im Browser auffallen.
+ */
+async function noteNetwork(proc, host, fd) {
+  if (!host || !proc.port) return
+  proc.networkUrl = `http://${host}:${proc.port}`
+  proc.networkListening = await probePort(proc.port, { hosts: [host] })
+  logLine(
+    fd,
+    proc.networkListening
+      ? `im Netz erreichbar unter ${proc.networkUrl}`
+      : `nur lokal erreichbar - lauscht nicht auf ${host} (Startkommando ohne Host-Bindung?)`
+  )
 }
 
 export function tailLog(file, lines = 12) {
@@ -140,6 +161,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     })
   }
 
+  const networkHost = networkHostFor(registry.settings)
   for (const proc of started) {
     const timeoutMs = registry.settings.readyTimeoutMs ?? 60000
     const result = await waitReady({ port: proc.port, pid: proc.pid, timeoutMs })
@@ -149,6 +171,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
       logLine(fd, `✓ lauscht auf ${proc.port} - wie zugewiesen`)
       logLine(fd, `erreichbar unter ${proc.url}`)
       proc.ready = true
+      await noteNetwork(proc, networkHost, fd)
       continue
     }
 
@@ -162,6 +185,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
       logLine(fd, `✓ lauscht auf ${proc.port} - wie zugewiesen`)
       logLine(fd, `erreichbar unter ${proc.url}`)
       proc.ready = true
+      await noteNetwork(proc, networkHost, fd)
       continue
     }
     const drifted = listening.filter((p) => p !== proc.port)
@@ -238,6 +262,14 @@ export async function restart(name, options = {}) {
   return up(name, options)
 }
 
+function hostOf(url) {
+  try {
+    return url ? new URL(url).hostname : null
+  } catch {
+    return null
+  }
+}
+
 export async function instanceStatus(project, profile, recorded, { withMemory = false } = {}) {
   const specs = project.profiles[profile] ?? []
   const processes = []
@@ -245,12 +277,15 @@ export async function instanceStatus(project, profile, recorded, { withMemory = 
     const rec = recorded?.processes?.find((p) => p.name === spec.name)
     const listening = spec.port ? await probePort(spec.port) : false
     const alive = rec?.pid ? isAlive(rec.pid) : rec?.runner === 'compose' ? listening : false
+    const networkHost = hostOf(spec.networkUrl)
     processes.push({
       name: spec.name,
       role: spec.role,
       runner: spec.runner,
       port: spec.port,
       url: spec.url,
+      networkUrl: spec.networkUrl,
+      networkListening: listening && networkHost ? await probePort(spec.port, { hosts: [networkHost] }) : false,
       paths: spec.paths,
       pid: rec?.pid,
       pgid: rec?.pgid,

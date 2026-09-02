@@ -15,6 +15,7 @@ const { applyBlock, ensureGitignore, localContractText, portableContractText, re
 const { launchJsonFor } = await import('../src/adapters/claude.js')
 const { parseArgs } = await import('../src/cli.js')
 const { githubBrowseUrl, githubInfoFor, remoteUrlFromConfig } = await import('../src/git.js')
+const { bindHostFor, networkHostFor, networkUrlFor } = await import('../src/net.js')
 
 test('Slot bestimmt beide Ports', () => {
   assert.equal(ports.portFor(90, 'frontend'), 5190)
@@ -357,7 +358,7 @@ test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
   assert.equal(j.profiles.default.length, 2)
   assert.equal(j.profiles.default[0].name, 'web')
   assert.equal(j.profiles.default[0].role, 'frontend')
-  assert.equal(j.profiles.default[0].env.MAPTALE_API, 'http://127.0.0.1:{backendPort}')
+  assert.equal(j.profiles.default[0].env.MAPTALE_API, '{backendUrl}')
   assert.equal(j.profiles.default[1].name, 'api')
   assert.equal(j.profiles.default[1].role, 'backend')
   assert.equal(j.profiles.default[1].port, 8720)
@@ -367,7 +368,7 @@ test('Frontend+API werden aus server/ bzw. web/+Python abgeleitet', () => {
 
   const s = describeProject(registry, 'schnappster')
   assert.equal(s.profiles.default[0].role, 'frontend')
-  assert.equal(s.profiles.default[0].env.NEXT_PUBLIC_API_URL, 'http://127.0.0.1:{backendPort}')
+  assert.equal(s.profiles.default[0].env.NEXT_PUBLIC_API_URL, '{backendUrl}')
   assert.equal(s.profiles.default[1].name, 'api')
   assert.deepEqual(s.profiles.default[1].cmd.slice(0, 3), ['uv', 'run', 'start'])
   assert.equal(s.profiles.default[1].port, 8717)
@@ -498,4 +499,95 @@ test('Settings-Patch validiert und expandiert Wurzeln', () => {
     () => registryStore.applySettingsPatch(registry, { roots: [] }),
     /Wurzel/
   )
+})
+
+test('ohne Freigabe bleibt alles auf Loopback', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-netz-aus-'))
+  const dir = join(root, 'journey')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ name: 'maptale', scripts: { dev: 'vite' }, dependencies: { vite: '6.0.0' } })
+  )
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost' },
+    projects: { journey: { path: dir, slot: 20, profileSlots: {}, displayName: 'Maptale' } },
+    displayNames: {},
+    retiredSlots: []
+  }
+
+  const web = describeProject(registry, 'journey').profiles.default[0]
+  assert.equal(web.networkUrl, undefined)
+  assert.ok(!web.cmd.includes('--host'), 'ohne Freigabe kein Host-Flag')
+  assert.equal(web.env.HOST, undefined)
+  assert.equal(bindHostFor({}), '127.0.0.1')
+  assert.equal(networkHostFor({ networkAccess: false, networkHost: '192.168.0.5' }), null)
+})
+
+test('Freigabe bindet die Startkommandos und liefert eine zweite Adresse', () => {
+  const root = mkdtempSync(join(tmpdir(), 'devhub-netz-'))
+
+  const maptale = join(root, 'journey')
+  mkdirSync(join(maptale, 'server'), { recursive: true })
+  writeFileSync(
+    join(maptale, 'package.json'),
+    JSON.stringify({ name: 'maptale', scripts: { dev: 'vite' }, dependencies: { vite: '6.0.0' } })
+  )
+  writeFileSync(
+    join(maptale, 'server', 'package.json'),
+    JSON.stringify({ name: 'maptale-server', scripts: { dev: 'tsx watch src/index.ts' } })
+  )
+
+  const next = join(root, 'patina')
+  mkdirSync(next, { recursive: true })
+  writeFileSync(
+    join(next, 'package.json'),
+    JSON.stringify({ name: 'patina', scripts: { dev: 'next dev' }, dependencies: { next: '15.0.0' } })
+  )
+
+  const registry = {
+    settings: { roots: [root], domainSuffix: 'localhost', networkAccess: true, networkHost: '192.168.0.5' },
+    projects: {
+      journey: { path: maptale, slot: 20, profileSlots: {}, displayName: 'Maptale' },
+      patina: { path: next, slot: 21, profileSlots: {}, displayName: 'Patina' }
+    },
+    displayNames: {},
+    retiredSlots: []
+  }
+
+  const [web, api] = describeProject(registry, 'journey').profiles.default
+  assert.deepEqual(web.cmd.slice(-2), ['--host', '0.0.0.0'], 'Vite lauscht sonst nur auf Loopback')
+  assert.equal(web.env.HOST, '0.0.0.0')
+  assert.equal(web.url, 'http://maptale.localhost:5120', 'die lokale Adresse bleibt')
+  assert.equal(web.networkUrl, 'http://192.168.0.5:5120')
+  assert.equal(api.env.HOST, '0.0.0.0')
+  assert.equal(api.networkUrl, 'http://192.168.0.5:8720')
+
+  const seite = describeProject(registry, 'patina').profiles.default[0]
+  assert.deepEqual(seite.cmd.slice(-2), ['--hostname', '0.0.0.0'], 'Next kennt --host nicht')
+  assert.equal(seite.networkUrl, 'http://192.168.0.5:5121')
+
+  assert.equal(bindHostFor(registry.settings), '0.0.0.0')
+  assert.equal(networkUrlFor(registry.settings, 5120), 'http://192.168.0.5:5120')
+  assert.equal(networkUrlFor(registry.settings, undefined), undefined)
+})
+
+test('Netzwerk-Host wird geprüft und normalisiert', () => {
+  const registry = {
+    settings: { ...registryStore.DEFAULT_SETTINGS },
+    projects: {},
+    displayNames: {},
+    retiredSlots: []
+  }
+  const { settings } = registryStore.applySettingsPatch(registry, {
+    networkAccess: true,
+    networkHost: '  Mac-Mini-von-Henrik.local '
+  })
+  assert.equal(settings.networkAccess, true)
+  assert.equal(settings.networkHost, 'mac-mini-von-henrik.local')
+
+  const leer = registryStore.applySettingsPatch(registry, { networkHost: '' }).settings
+  assert.equal(leer.networkHost, '', 'leer heißt: gemessene Adresse')
+  assert.throws(() => registryStore.applySettingsPatch(registry, { networkHost: 'kein host!' }), /ungültig/)
 })

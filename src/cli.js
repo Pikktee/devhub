@@ -15,6 +15,7 @@ import { startHub } from './server/index.js'
 import { runSetup } from './setup.js'
 import { color, dateTime, duration, table } from './util/fmt.js'
 import { portFor } from './ports.js'
+import { networkHostFor } from './net.js'
 
 const ALIASES = {
   profil: 'profile',
@@ -142,6 +143,14 @@ async function cmdStatus(positionals, flags) {
             `  ${proc.name.padEnd(8)} ${String(proc.role).padEnd(9)} ${proc.url ?? '-'}` +
               (proc.listening === false && profile.state !== 'gestoppt' ? color.dim(' (nicht erreichbar)') : '')
           )
+          if (proc.networkUrl) {
+            details.push(
+              color.dim(
+                `  ${''.padEnd(8)} ${'im Netz'.padEnd(9)} ${proc.networkUrl}` +
+                  (proc.listening && !proc.networkListening ? ' (lauscht nur lokal)' : '')
+              )
+            )
+          }
         }
       }
     }
@@ -157,6 +166,16 @@ async function cmdStatus(positionals, flags) {
 
 // ---------------------------------------------------------------- up/down
 
+/** Zweite Adresse nur, wenn die Freigabe an ist - und ehrlich, wenn sie nicht greift. */
+function netzZeilen(proc) {
+  if (!proc.networkUrl) return []
+  return [
+    proc.networkListening
+      ? `  ${color.dim('im Netz')} ${color.blue(proc.networkUrl)}`
+      : color.dim(`  im Netz nicht erreichbar - ${proc.networkUrl} antwortet nicht`)
+  ]
+}
+
 async function cmdUp(positionals, flags) {
   const registry = registryStore.load()
   const name = resolveName(registry, positionals[0])
@@ -170,6 +189,7 @@ async function cmdUp(positionals, flags) {
   for (const proc of result.processes) {
     if (proc.ready === false) continue
     console.log(`${color.green('●')} ${name}/${proc.name} → ${color.blue(proc.url)}`)
+    for (const zeile of netzZeilen(proc)) console.log(zeile)
   }
   for (const warning of result.warnings) console.warn(color.yellow('! ') + warning)
   if (result.warnings.length) process.exitCode = 1
@@ -196,7 +216,10 @@ async function cmdRestart(positionals, flags) {
   const name = resolveName(registry, positionals[0])
   if (!name) return fail('Kein Projekt angegeben.')
   const result = await restart(name, { profile: flags.profile ?? 'default', registry })
-  for (const proc of result.processes) console.log(`${color.green('●')} ${name}/${proc.name} → ${color.blue(proc.url)}`)
+  for (const proc of result.processes) {
+    console.log(`${color.green('●')} ${name}/${proc.name} → ${color.blue(proc.url)}`)
+    for (const zeile of netzZeilen(proc)) console.log(zeile)
+  }
   for (const warning of result.warnings) console.warn(color.yellow('! ') + warning)
 }
 
@@ -505,10 +528,22 @@ async function cmdDoctor() {
     }
   }
 
+  const netzHost = networkHostFor(registry.settings)
+  if (netzHost) findings.push(['Gut', `Netzwerk-Freigabe an - Projekte zusätzlich unter http://${netzHost}:<port>`])
+
   for (const instance of stateStore.all()) {
     for (const proc of instance.processes ?? []) {
       const busy = await probePort(proc.port)
-      if (!busy) findings.push(['Hinweis', `${instance.project}/${proc.name}: als laufend vermerkt, aber ${proc.port} antwortet nicht`])
+      if (!busy) {
+        findings.push(['Hinweis', `${instance.project}/${proc.name}: als laufend vermerkt, aber ${proc.port} antwortet nicht`])
+        continue
+      }
+      if (netzHost && !(await probePort(proc.port, { hosts: [netzHost] }))) {
+        findings.push([
+          'Hinweis',
+          `${instance.project}/${proc.name}: lauscht nur lokal - ${netzHost}:${proc.port} antwortet nicht. Nach dem Umstellen einmal "devhub restart ${instance.project}".`
+        ])
+      }
     }
   }
 
