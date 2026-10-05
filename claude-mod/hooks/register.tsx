@@ -1,0 +1,299 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
+
+import type { DevhubProcess, DevhubView } from '../types'
+import { matchDevServerStart } from './dev-server-patterns.js'
+import {
+  backendsOf,
+  composeText,
+  denyText,
+  errorLines,
+  frontendOf,
+  portWarning,
+  statusText,
+  viewOf
+} from './hub'
+import type { Overview } from './hub'
+
+const DEFAULT_HUB_PORT = 4000
+const POLL_MS = 5000
+const LOG_TOOL = 'mcp__devhub__logs'
+
+const view = atom({ plugin: 'devhub', key: 'view' } as const, null)
+
+type Engine = EngineInterface
+
+/**
+ * Was der Hub zuletzt gesagt hat. Modulvariablen genügen, weil der nächste
+ * Abgleich sie nach einem Neuladen ohnehin wieder füllt; nur was gezeichnet
+ * wird, steht in `$.state`.
+ */
+let overview: Overview | null = null
+let hubPort = DEFAULT_HUB_PORT
+let toolRegistered = false
+/** Was der Kontextblock zuletzt sagte; nur eine Änderung der Adressen verwirft ihn. */
+let lastComposed: string | undefined
+
+async function readHubPort($: Engine): Promise<number> {
+  const configDir = (await $.env.get('DEVHUB_CONFIG_DIR')) ?? `${(await $.env.get('HOME')) ?? ''}/.config/devhub`
+  try {
+    const registry = JSON.parse(await $.fs.read(`${configDir}/registry.json`))
+    const port = Number(registry?.settings?.hubPort)
+    return Number.isInteger(port) && port > 0 ? port : DEFAULT_HUB_PORT
+  } catch {
+    return DEFAULT_HUB_PORT
+  }
+}
+
+const hubUrl = (path: string) => `http://127.0.0.1:${hubPort}${path}`
+
+async function hubJson<T>($: Engine, path: string, init?: { method: string; body?: unknown }): Promise<T> {
+  const res = await $.http.fetch(hubUrl(path), {
+    method: init?.method ?? 'GET',
+    headers: init?.body === undefined ? {} : { 'content-type': 'application/json' },
+    body: init?.body === undefined ? undefined : JSON.stringify(init.body)
+  })
+  let payload: unknown = null
+  try {
+    payload = JSON.parse(res.text)
+  } catch {
+    // Kein JSON: der Status allein muss reichen.
+  }
+  if (!res.ok) {
+    const message = (payload as { error?: string } | null)?.error ?? `HTTP ${res.status}`
+    throw new Error(message)
+  }
+  return payload as T
+}
+
+/**
+ * Ein Abgleich mit dem Hub. Scheitert er, gilt der Hub als weg und der Mod
+ * räumt alles Sichtbare ab - lieber stumm als ein veralteter Zustand.
+ */
+async function refresh($: Engine): Promise<DevhubView | null> {
+  hubPort = await readHubPort($)
+  let next: DevhubView | null = null
+  try {
+    overview = await hubJson<Overview>($, '/api/overview')
+    next = viewOf(overview, await $.session.cwd())
+  } catch {
+    overview = null
+  }
+
+  $.ui.status(next ? statusText(next) : undefined)
+  const previous = await read($, view)
+  if (JSON.stringify(previous) !== JSON.stringify(next)) await update($, view, () => next)
+  const composed = next && overview ? composeText(next) : undefined
+  if (composed !== lastComposed) {
+    lastComposed = composed
+    $.ui.invalidate('prompt.context')
+  }
+
+  if (overview && !toolRegistered) {
+    toolRegistered = true
+    await $.tool.register({
+      name: 'logs',
+      description:
+        'Liest die letzten Fehlerzeilen aus den Logs der devhub-Dev-Server des Projekts dieser Sitzung (alle Prozesse des Profils, z. B. web und api). ' +
+        'Nutzen, wenn eine Seite nicht lädt, eine API-Anfrage scheitert oder ein Server nicht hochkommt - statt den Server selbst zu starten, um seine Ausgabe zu sehen.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          process: { type: 'string', description: 'Nur dieser Prozess (z. B. "api"); sonst alle.' },
+          lines: { type: 'number', description: 'Höchstens so viele Zeilen je Prozess (Standard 40).' },
+          all: { type: 'boolean', description: 'Alle letzten Zeilen statt nur Fehlerzeilen.' },
+          project: { type: 'string', description: 'Anderes Projekt (Ordnername) statt dem der Sitzung.' }
+        }
+      }
+    })
+  }
+  return next
+}
+
+type LogPayload = { process: string; processes: string[]; lines: string[] }
+
+async function logText(
+  $: Engine,
+  target: { name: string; profile: string },
+  opts: { process?: string; lines?: number; all?: boolean }
+): Promise<string> {
+  const limit = Math.max(1, Math.min(400, Math.round(opts.lines ?? 40)))
+  const query = (proc?: string) =>
+    `/api/projects/${encodeURIComponent(target.name)}/logs?profile=${encodeURIComponent(target.profile)}&lines=400${
+      proc ? `&process=${encodeURIComponent(proc)}` : ''
+    }`
+  const first = await hubJson<LogPayload>($, query(opts.process))
+  const names = opts.process ? [first.process] : first.processes
+  const sections: string[] = []
+  for (const name of names) {
+    const payload = name === first.process ? first : await hubJson<LogPayload>($, query(name))
+    const picked = opts.all ? payload.lines : errorLines(payload.lines)
+    if (!picked.length) {
+      const tail = payload.lines.slice(-5)
+      sections.push(
+        `## ${name}: keine Fehlerzeilen in den letzten ${payload.lines.length} Zeilen` +
+          (tail.length ? `\nLetzte Zeilen:\n${tail.join('\n')}` : '')
+      )
+      continue
+    }
+    sections.push(`## ${name}${opts.all ? '' : ': Fehlerzeilen'}\n${picked.slice(-limit).join('\n')}`)
+  }
+  return `devhub-Logs ${target.name} (Profil ${target.profile})\n\n${sections.join('\n\n')}`
+}
+
+function describe(v: DevhubView): string {
+  const lines = [statusText(v) ?? `devhub ${v.displayName}: nicht aufgenommen (devhub adopt ${v.name})`]
+  for (const p of v.processes) {
+    lines.push(`  ${p.listening ? '●' : '○'} ${p.name.padEnd(8)} ${p.role ?? ''} ${p.url ?? (p.port ? `:${p.port}` : '-')}${p.foreign ? '  ⚠ fremd belegt' : ''}`)
+  }
+  return lines.join('\n')
+}
+
+const HUB_DOWN = () => `devhub: kein Hub auf 127.0.0.1:${hubPort} erreichbar. Läuft der Dienst? \`devhub doctor\` sagt mehr.`
+
+export const register: Register = (on) => {
+  on('session.start', async ($, e, next) => {
+    await $.command.register({
+      name: 'devhub',
+      description: 'Dev-Server dieses Projekts über devhub: up, down, restart, status, logs, open',
+      argumentHint: 'up|down|restart|status|logs|open [projekt]'
+    })
+    await refresh($)
+    $.clock.every(POLL_MS, () => void refresh($))
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const v = await read($, view)
+    if (e.props.hasSurvey || !v?.adopted || v.state === 'aus') return next(e)
+    const front = frontendOf(v)
+    const backends = backendsOf(v)
+    const live = [front, ...backends].filter((p): p is DevhubProcess => Boolean(p?.listening && p.url))
+    if (!live.length) return next(e)
+    const { Box, Text, Link, Button } = $.ui.resolve(e)
+    const labelOf = (p: DevhubProcess) =>
+      p === front ? 'Frontend' : p.role === 'backend' ? `API${backends.length > 1 ? ` ${p.name}` : ''}` : p.name
+    return (
+      <Box flexDirection="row" gap={1}>
+        <Text dimColor>
+          devhub {v.state === 'läuft' ? '●' : '◐'} {v.displayName}
+        </Text>
+        {live.map((p) => {
+          const url = new URL(p.url!)
+          // Link nimmt nur https: und http://localhost. Die Adresse auf localhost
+          // umzuschreiben hieße anderer Host, andere Cookies: lieber ein Knopf,
+          // der genau die Adresse öffnet, die der Hub vergeben hat.
+          if (url.hostname === 'localhost') return <Link key={`link-${p.name}`} href={url.href} label={labelOf(p)} />
+          return (
+            <Box key={`box-${p.name}`} flexDirection="row">
+              <Button
+                key={`open-${p.name}`}
+                label={labelOf(p)}
+                plain
+                onPress={() => void $.process.run(['open', url.href])}
+              />
+              <Text dimColor> {url.host}</Text>
+            </Box>
+          )
+        })}
+      </Box>
+    )
+  })
+
+  // Gedacht war prompt.compose; dieser Engine-Build kennt das Ereignis nicht.
+  // Ein eigener Kontextblock kommt ohne Annahmen über Abschnittsnamen aus.
+  on('prompt.context', async ($, e, next) => {
+    const composed = await next(e)
+    const v = await read($, view)
+    const text = v && overview ? composeText(v) : undefined
+    lastComposed = text
+    if (!text) return composed
+    return { ...composed, blocks: [...composed.blocks.filter((b) => b.name !== 'devhub'), { name: 'devhub', text }] }
+  })
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const command = String(e.command ?? '')
+    const pattern = matchDevServerStart(command)
+    if (pattern) {
+      // Frisch fragen: die Antwort nennt den Zustand, und der darf nicht fünf Sekunden alt sein.
+      const v = await refresh($)
+      if (!overview) return next(e)
+      return { deny: denyText(pattern, v) }
+    }
+
+    const ran = await next(e)
+    const v = await read($, view)
+    if (ran.deny !== undefined || !v || !overview) return ran
+    const warning = portWarning(command, v, overview, hubPort)
+    if (!warning) return ran
+    return { ...ran, context: [...(ran.context ?? []), warning] }
+  })
+
+  on('tool.call', { tool: LOG_TOOL }, async ($, e) => {
+    const input = e as unknown as { process?: string; lines?: number; all?: boolean; project?: string }
+    const v = await read($, view)
+    const target = input.project
+      ? { name: input.project, profile: 'default' }
+      : v
+        ? { name: v.name, profile: v.profile }
+        : null
+    if (!target) return { result: 'Diese Sitzung gehört zu keinem Projekt im Hub. Mit "project" ein Projekt (Ordnername) angeben.' }
+    try {
+      return { result: await logText($, target, input) }
+    } catch (err) {
+      return { result: `devhub: Logs von ${target.name} nicht lesbar: ${(err as Error).message}` }
+    }
+  })
+
+  on('command.run', { command: 'devhub' }, async ($, e) => {
+    const [verb = 'status', explicit] = e.args.trim().split(/\s+/).filter(Boolean)
+    const v = await refresh($)
+    if (!overview) return { text: HUB_DOWN() }
+    const name = explicit ?? v?.name
+    const profile = explicit ? 'default' : (v?.profile ?? 'default')
+
+    if (verb === 'open' && explicit === 'hub') {
+      await $.process.run(['open', `http://devhub.localhost:${hubPort}`])
+      return { text: `http://devhub.localhost:${hubPort} geöffnet` }
+    }
+    if (!name) return { text: 'devhub: dieses Verzeichnis gehört zu keinem Projekt im Hub. `/devhub <befehl> <ordner>` nennt eines.' }
+
+    try {
+      switch (verb) {
+        case 'up':
+        case 'down':
+        case 'restart': {
+          const result = await hubJson<{ ok: boolean; warnings?: unknown[] }>($, `/api/projects/${encodeURIComponent(name)}/${verb}`, {
+            method: 'POST',
+            body: { profile }
+          })
+          const after = await refresh($)
+          const warnings = (result.warnings ?? []).map((w) => `  ⚠ ${typeof w === 'string' ? w : JSON.stringify(w)}`)
+          const word = verb === 'up' ? 'gestartet' : verb === 'down' ? 'gestoppt' : 'neu gestartet'
+          return { text: [`devhub ${name} ${word}`, ...warnings, after && after.name === name ? describe(after) : ''].filter(Boolean).join('\n') }
+        }
+        case 'status': {
+          if (explicit && explicit !== v?.name) {
+            const other = overview.projects.find((p) => p.name === explicit)
+            if (!other) return { text: `devhub: ${explicit} ist unbekannt` }
+            return { text: describe(viewOf(overview, other.path)!) }
+          }
+          return { text: v ? describe(v) : 'devhub: kein Projekt' }
+        }
+        case 'logs':
+          return { text: await logText($, { name, profile }, { all: true, lines: 30 }) }
+        case 'open': {
+          const target = explicit && explicit !== v?.name ? viewOf(overview, overview.projects.find((p) => p.name === explicit)?.path ?? '') : v
+          const url = target ? frontendOf(target)?.url : undefined
+          if (!url) return { text: `devhub: keine Adresse für ${name}` }
+          await $.process.run(['open', url])
+          return { text: `${url} geöffnet${target?.state === 'aus' ? ` (läuft gerade nicht: /devhub up)` : ''}` }
+        }
+        default:
+          return { text: `devhub: unbekannter Befehl "${verb}". Möglich: up, down, restart, status, logs, open [projekt|hub]` }
+      }
+    } catch (err) {
+      return { text: `devhub ${verb} ${name}: ${(err as Error).message}` }
+    }
+  })
+}

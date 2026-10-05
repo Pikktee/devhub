@@ -1,0 +1,6 @@
+{
+  "name": "devhub",
+  "version": "0.1.0",
+  "description": "Zeigt den devhub-Zustand des Projekts dieser Sitzung und hält Dev-Server-Starts beim Hub.",
+  "types": "./types/index.d.ts"
+}
