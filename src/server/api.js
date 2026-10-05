@@ -271,7 +271,7 @@ export const routes = [
       const results = body.project
         ? [syncProject(registry, body.project, { dryRun: Boolean(body.dryRun) })]
         : syncAll(registry, { dryRun: Boolean(body.dryRun) })
-      const global = body.global ? syncGlobal({ dryRun: Boolean(body.dryRun), withHook: Boolean(body.hook) }) : []
+      const global = body.global ? syncGlobal({ dryRun: Boolean(body.dryRun), withHook: Boolean(body.hook), withMod: body.mod !== false }) : []
       if (!body.dryRun) {
         const changed = [...results.flatMap((r) => r.changes ?? []), ...global].filter((c) => c.changed)
         recordEvent({

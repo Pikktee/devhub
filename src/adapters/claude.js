@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { readJson } from '../util/json.js'
+import { DEV_SERVER_STARTS } from '../../claude-mod/hooks/dev-server-patterns.js'
 
 /**
  * Gemessen: `preview_start` hängt sich nicht an einen fremden Server, es bricht
@@ -85,7 +86,10 @@ export function removeLaunchJson(projectPath, { dryRun = false } = {}) {
   }
 }
 
-export const HOOK_MATCHERS = ['npm run dev', 'pnpm dev', 'yarn dev', 'vite', 'next dev', 'uvicorn', 'http.server', 'docker compose up']
+/** Bash-Globs aus denselben Mustern, die der Claude-Code-Mod prüft. */
+function caseGlobs() {
+  return DEV_SERVER_STARTS.map((pattern) => `*"${pattern}"*`).join('|')
+}
 
 export function hookScript(devBin) {
   return `#!/usr/bin/env bash
@@ -95,11 +99,66 @@ eingabe=$(cat)
 kommando=$(printf '%s' "$eingabe" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("tool_input",{}).get("command",""))' 2>/dev/null || true)
 
 case "$kommando" in
-  *"npm run dev"*|*"pnpm dev"*|*"yarn dev"*|*"npx vite"*|*"next dev"*|*"uvicorn "*|*"http.server"*|*"docker compose up"*)
+  ${caseGlobs()})
     printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Dev-Server gehören devhub. Nutze ${devBin} up <projekt> bzw. ${devBin} status."}}'
     exit 0
     ;;
 esac
 exit 0
 `
+}
+
+export const HOOK_SCRIPT_NAME = 'devhub-kein-dev-server.sh'
+export const PLUGIN_DIRS_KEY = 'CLAUDE_CODE_PLUGIN_DIRS'
+
+/**
+ * Claude Code liest CLAUDE_CODE_PLUGIN_DIRS als Pfadliste mit ":" - fremde
+ * Einträge darin gehören anderen Werkzeugen und bleiben stehen.
+ */
+function pluginDirs(settings) {
+  return String(settings.env?.[PLUGIN_DIRS_KEY] ?? '')
+    .split(':')
+    .filter(Boolean)
+}
+
+export function hasPluginDir(settings, dir) {
+  return pluginDirs(settings).includes(dir)
+}
+
+/** Gibt eine neue Settings-Struktur zurück; `changed` sagt, ob sich etwas tat. */
+export function withPluginDir(settings, dir) {
+  if (hasPluginDir(settings, dir)) return { settings, changed: false }
+  const env = { ...(settings.env ?? {}), [PLUGIN_DIRS_KEY]: [...pluginDirs(settings), dir].join(':') }
+  return { settings: { ...settings, env }, changed: true }
+}
+
+export function withoutPluginDir(settings, dir) {
+  if (!hasPluginDir(settings, dir)) return { settings, changed: false }
+  const rest = pluginDirs(settings).filter((d) => d !== dir)
+  const env = { ...settings.env }
+  if (rest.length) env[PLUGIN_DIRS_KEY] = rest.join(':')
+  else delete env[PLUGIN_DIRS_KEY]
+  const next = { ...settings, env }
+  if (!Object.keys(env).length) delete next.env
+  return { settings: next, changed: true }
+}
+
+const isDevhubHook = (entry) => entry.hooks?.some((inner) => inner.command?.includes(HOOK_SCRIPT_NAME))
+
+export function hasDevhubHook(settings) {
+  return Boolean(settings.hooks?.PreToolUse?.some(isDevhubHook))
+}
+
+/**
+ * Entfernt den Bash-Hook aus den Settings. Mod und Hook würden sonst beide
+ * sperren - mit zwei verschiedenen Begründungen für denselben Befehl.
+ */
+export function withoutDevhubHook(settings) {
+  if (!hasDevhubHook(settings)) return { settings, changed: false }
+  const PreToolUse = settings.hooks.PreToolUse.filter((entry) => !isDevhubHook(entry))
+  const hooks = { ...settings.hooks, PreToolUse }
+  if (!PreToolUse.length) delete hooks.PreToolUse
+  const next = { ...settings, hooks }
+  if (!Object.keys(hooks).length) delete next.hooks
+  return { settings: next, changed: true }
 }

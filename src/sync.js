@@ -1,8 +1,17 @@
 import { chmodSync, closeSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { claudeHome, codexHome, cursorHome, hubLogFile } from './paths.js'
+import { claudeHome, codexHome, cursorHome, hubLogFile, repoRoot } from './paths.js'
 import { describeProject } from './discovery.js'
-import { removeLaunchJson, writeLaunchJson, hookScript } from './adapters/claude.js'
+import {
+  HOOK_SCRIPT_NAME,
+  hasDevhubHook,
+  hookScript,
+  removeLaunchJson,
+  withPluginDir,
+  withoutDevhubHook,
+  withoutPluginDir,
+  writeLaunchJson
+} from './adapters/claude.js'
 import { removeCursorRule, writeCursorRule } from './adapters/cursor.js'
 import { ensureGitignore, localContractText, removeBlock, writeBlock } from './adapters/contract.js'
 import { logLine, openLog } from './runners/process.js'
@@ -141,7 +150,15 @@ Nummer - der Unterschied fällt erst auf, wenn Login/Daten fehlen.
 Ein \`devhub up\` startet alle Rollen des Profils (z. B. web+api). Nicht nur das
 Frontend von Hand nachziehen.`
 
-export function syncGlobal({ dryRun = false, withHook = false } = {}) {
+/** Der Claude-Code-Mod liegt im Repo; Claude Code lädt ihn direkt von dort. */
+export const claudeModDir = join(repoRoot, 'claude-mod')
+
+/**
+ * Mod und Bash-Hook schließen sich aus: mit Mod (Standard) wird kein Hook
+ * installiert und ein alter entfernt, `--hook` allein reicht dafür nicht.
+ * Wer den Hook will, nimmt `--ohne-mod --hook`.
+ */
+export function syncGlobal({ dryRun = false, withHook = false, withMod = true } = {}) {
   const changes = []
   changes.push({ adapter: 'claude', ...writeBlock(join(claudeHome, 'CLAUDE.md'), GLOBAL_BLOCK, { dryRun }) })
   changes.push({
@@ -154,7 +171,24 @@ export function syncGlobal({ dryRun = false, withHook = false } = {}) {
   })
   changes.push({ adapter: 'codex', ...writeBlock(join(codexHome, 'AGENTS.md'), GLOBAL_BLOCK, { dryRun }) })
 
-  if (withHook) changes.push(installClaudeHook({ dryRun }))
+  if (withMod) {
+    changes.push(installClaudeMod({ dryRun }))
+    const removed = removeClaudeHook({ dryRun })
+    if (removed.changed) changes.push(removed)
+    if (withHook) {
+      changes.push({
+        adapter: 'claude',
+        file: join(claudeHome, 'settings.json'),
+        changed: false,
+        action: 'Hook übersprungen',
+        detail: 'der Claude-Code-Mod sperrt Dev-Server-Starts selbst (Hook nur mit --ohne-mod)'
+      })
+    }
+  } else {
+    const removed = removeClaudeMod({ dryRun })
+    if (removed.changed) changes.push(removed)
+    if (withHook) changes.push(installClaudeHook({ dryRun }))
+  }
 
   if (!dryRun) {
     hubLog([
@@ -168,13 +202,50 @@ export function syncGlobal({ dryRun = false, withHook = false } = {}) {
   return changes
 }
 
+function editClaudeSettings(edit, { dryRun }) {
+  const settingsFile = join(claudeHome, 'settings.json')
+  const { settings, changed } = edit(readJson(settingsFile, {}))
+  if (changed && !dryRun) writeJson(settingsFile, settings)
+  return { settingsFile, changed }
+}
+
+export function installClaudeMod({ dryRun = false, dir = claudeModDir } = {}) {
+  const { settingsFile, changed } = editClaudeSettings((s) => withPluginDir(s, dir), { dryRun })
+  return {
+    adapter: 'claude',
+    file: settingsFile,
+    changed,
+    action: changed ? 'Claude-Code-Mod eingetragen' : 'Claude-Code-Mod bereits eingetragen',
+    detail: `env.CLAUDE_CODE_PLUGIN_DIRS ← ${dir}`
+  }
+}
+
+export function removeClaudeMod({ dryRun = false, dir = claudeModDir } = {}) {
+  const { settingsFile, changed } = editClaudeSettings((s) => withoutPluginDir(s, dir), { dryRun })
+  return { adapter: 'claude', file: settingsFile, changed, action: 'Claude-Code-Mod ausgetragen', detail: dir }
+}
+
+export function removeClaudeHook({ dryRun = false } = {}) {
+  const script = join(claudeHome, 'hooks', HOOK_SCRIPT_NAME)
+  const { settingsFile, changed } = editClaudeSettings(withoutDevhubHook, { dryRun })
+  if (!dryRun && existsSync(script)) unlinkSync(script)
+  return {
+    adapter: 'claude',
+    file: settingsFile,
+    changed,
+    deleted: changed,
+    action: 'Bash-Hook entfernt',
+    detail: 'ersetzt durch den Claude-Code-Mod'
+  }
+}
+
 /**
  * Der Hook wirkt unabhängig davon, was das Modell gerade denkt - deshalb ist er
  * die Rückfallebene, wenn eine Regel im Kontext nicht reicht. Standardmäßig aus,
  * weil er auch legitime Aufrufe abfängt.
  */
 export function installClaudeHook({ dryRun = false } = {}) {
-  const script = join(claudeHome, 'hooks', 'devhub-kein-dev-server.sh')
+  const script = join(claudeHome, 'hooks', HOOK_SCRIPT_NAME)
   const settingsFile = join(claudeHome, 'settings.json')
 
   if (!dryRun) {
@@ -183,12 +254,9 @@ export function installClaudeHook({ dryRun = false } = {}) {
     chmodSync(script, 0o755)
 
     const settings = readJson(settingsFile, {})
-    settings.hooks ??= {}
-    settings.hooks.PreToolUse ??= []
-    const already = settings.hooks.PreToolUse.some((h) =>
-      h.hooks?.some((inner) => inner.command?.includes('devhub-kein-dev-server'))
-    )
-    if (!already) {
+    if (!hasDevhubHook(settings)) {
+      settings.hooks ??= {}
+      settings.hooks.PreToolUse ??= []
       settings.hooks.PreToolUse.push({ matcher: 'Bash', hooks: [{ type: 'command', command: script }] })
       writeJson(settingsFile, settings)
     }

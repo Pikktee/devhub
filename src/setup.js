@@ -225,7 +225,7 @@ export async function runSetup(opts = {}) {
 
     const globalChanges = syncGlobal({ dryRun: false, withHook: false })
     const geschrieben = globalChanges.filter((c) => c.changed).length
-    push('Agent-Regeln', true, `sync --global (${geschrieben} Dateien geändert)`)
+    push('Agent-Regeln', true, `sync --global (${geschrieben} Dateien geändert, Claude-Code-Mod in CLAUDE_CODE_PLUGIN_DIRS)`)
   } else {
     push('npm link', true, 'übersprungen (Test)')
     push('launchd', true, 'übersprungen (Test)')

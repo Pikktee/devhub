@@ -32,6 +32,8 @@ const ALIASES = {
   global: 'global',
   'ohne-global': 'noGlobal',
   hook: 'hook',
+  'ohne-mod': 'noMod',
+  'no-mod': 'noMod',
   port: 'port',
   datei: 'file',
   richtung: 'direction',
@@ -53,7 +55,7 @@ const ALIASES = {
   w: 'wurzel'
 }
 
-const BOOLEAN_FLAGS = new Set(['all', 'follow', 'dryRun', 'global', 'noGlobal', 'hook', 'json', 'help', 'finder', 'on', 'off', 'keepFiles', 'cleanDeps'])
+const BOOLEAN_FLAGS = new Set(['all', 'follow', 'dryRun', 'global', 'noGlobal', 'hook', 'noMod', 'json', 'help', 'finder', 'on', 'off', 'keepFiles', 'cleanDeps'])
 
 export function parseArgs(argv) {
   const positionals = []
@@ -382,9 +384,15 @@ async function cmdSync(positionals, flags) {
   }
 
   if (flags.global) {
-    const changes = syncGlobal({ dryRun, withHook: Boolean(flags.hook) })
+    const changes = syncGlobal({ dryRun, withHook: Boolean(flags.hook), withMod: !flags.noMod })
     console.log(`\n${color.green('✓')} global`)
-    for (const change of changes.filter((c) => c.changed)) console.log(`  ${change.adapter.padEnd(8)} ${change.file}`)
+    for (const change of changes.filter((c) => c.changed)) {
+      console.log(`  ${change.adapter.padEnd(8)} ${change.file}`)
+      if (change.action) console.log(color.dim(`           ${change.action}${change.detail ? ` - ${change.detail}` : ''}`))
+    }
+    for (const change of changes.filter((c) => !c.changed && c.action === 'Hook übersprungen')) {
+      console.log(color.dim(`  ${change.action}: ${change.detail}`))
+    }
   }
 
   if (dryRun) console.log(color.dim('\nProbelauf - es wurde nichts geschrieben.'))
@@ -658,10 +666,11 @@ const HELP = `devhub - die Dev-Server gehören dem Hub, nicht der Sitzung
   devhub adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
   devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; lokale Hub-Dateien werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
   devhub sync [--projekt x] [--global] lokale Agent-Dateien schreiben (--probelauf zeigt nur)
+                                       --global trägt den Claude-Code-Mod ein; --ohne-mod --hook nimmt stattdessen den Bash-Hook
   devhub agents [projekt]              Regeln, Skills und Memory des Projekts
   devhub link [projekt] [--alle]       AGENTS.md und CLAUDE.md verknüpfen (ohne Argument: Bericht)
   devhub doctor                        Kollisionen und Ungereimtheiten
-  devhub setup [--wurzel Pfad]         neuen Rechner einrichten (npm link, launchd, Regeln, Skill)
+  devhub setup [--wurzel Pfad]         neuen Rechner einrichten (npm link, launchd, Regeln, Claude-Code-Mod, Skill)
   devhub serve [--port 4000]           Hub im Vordergrund
   devhub service install|uninstall     launchd-Dienst
   devhub open [projekt]                im Browser öffnen (--finder / --ordner: Ordner im Finder)

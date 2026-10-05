@@ -211,7 +211,55 @@ global auf der Maschine (`sync --global`), nicht in jedem Projekt-Repo.
 `devhub sync --global` schreibt die allgemeine Regel nach
 `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc` und `~/.codex/AGENTS.md`.
 
-Optional `--hook`: Claude-PreToolUse fängt typische Dev-Server-Starts ab.
+Außerdem trägt `sync --global` (und damit auch `setup`) den **Claude-Code-Mod**
+ein, siehe unten. Wer statt des Mods den alten Bash-Hook will:
+`devhub sync --global --ohne-mod --hook`. Beides zusammen gibt es nicht; mit Mod
+wird ein vorhandener Hook entfernt.
+
+### Claude-Code-Mod
+
+Unter [`claude-mod/`](claude-mod/) liegt ein Plugin für Claude Code (Terminal und
+Code-Tab der Desktop-App), das projektübergreifend wirkt. Es fragt die Hub-API auf
+`127.0.0.1:<hubPort>` (aus `registry.json`, Standard 4000) alle fünf Sekunden ab
+und ordnet die Sitzung über ihr Arbeitsverzeichnis einem Projekt zu (der engste
+Projektpfad gewinnt).
+
+| Was | Wirkung |
+| --- | --- |
+| Statuszeile | `devhub ● läuft · Maptale · http://maptale.localhost:5123`, bei `aus` der Startbefehl, bei fremd belegten Ports ein ⚠. Nur für aufgenommene Projekte. |
+| Band über dem Prompt | Knöpfe zu Frontend und API, solange das Projekt läuft. |
+| Kontext fürs Modell | Ein Block `devhub` mit den echten Adressen dieses Projekts. Ohne Laufzustand, damit er sich nur ändert, wenn sich Adressen ändern. |
+| Bash-Sperre | Dev-Server-Starts (dieselben Muster wie der Hook, [`dev-server-patterns.js`](claude-mod/hooks/dev-server-patterns.js)) werden abgelehnt; die Antwort nennt `devhub up <projekt>` und den aktuellen Zustand. |
+| Port-Warnung | Ein `localhost`-Port im Befehl, der nicht zu diesem Projekt gehört, bekommt einen Hinweis fürs Modell (wem er gehört, welche Adressen richtig sind). Kein Verbot. |
+| Tool `mcp__devhub__logs` | Letzte Fehlerzeilen aller Prozesse des Projekts (pino-JSON ab Level 50 eingeschlossen). |
+| `/devhub` | `up`, `down`, `restart`, `status`, `logs`, `open`, optional mit Projektname; `/devhub open hub` öffnet die Übersicht. |
+
+**Ist kein Hub erreichbar, bleibt der Mod stumm:** keine Statuszeile, kein
+Kontextblock, keine Sperre, kein Tool. Nur `/devhub` antwortet dann mit einem
+Hinweis.
+
+Eingebunden wird der Ordner über `env.CLAUDE_CODE_PLUGIN_DIRS` in
+`~/.claude/settings.json`; Claude Code lädt ihn direkt aus dem Repo und lädt neu,
+wenn sich eine Datei ändert. Einzeln ausprobieren geht auch ohne Eintrag:
+
+```bash
+claude --plugin-dir ~/Dev/devhub/claude-mod
+```
+
+Zwei Abweichungen vom Naheliegenden, beide von der Plugin-API erzwungen:
+
+- **Knöpfe statt Links im Band.** Das Link-Element nimmt nur `https:` und
+  `http://localhost`. Die Adresse auf `localhost` umzuschreiben hieße anderer Host,
+  andere Cookies, also öffnet ein Knopf genau die vergebene Adresse per `open`.
+- **Kontextblock statt Systemprompt-Abschnitt.** `prompt.compose` ist in der
+  aktuellen Claude-Code-Version noch nicht freigeschaltet; `prompt.context` legt
+  den Block in die erste Nachricht der Unterhaltung.
+
+Prüfen (läuft in der Testumgebung von Claude Code gegen eine nachgestellte Hub-API):
+
+```bash
+claude plugin validate claude-mod && claude plugin test claude-mod
+```
 
 ### Cursor-Skill
 
@@ -296,6 +344,7 @@ Für Modulstarts wie uvicorn braucht es weiter eine Datei:
 | Laufzustand | `~/.local/state/devhub/state.json` |
 | Logs | `~/.local/state/devhub/logs/` |
 | launchd | `~/Library/LaunchAgents/dev.local.devhub.plist` |
+| Claude-Code-Mod | Eintrag in `env.CLAUDE_CODE_PLUGIN_DIRS` von `~/.claude/settings.json` |
 
 In `registry.json` unter `settings` u. a.:
 
@@ -330,6 +379,7 @@ Optional aufräumen:
 | --- | --- |
 | Cursor-Skill | `rm -rf ~/.cursor/skills/devhub` |
 | Globale Agent-Regeln | Block zwischen den `devhub`-Ankern in `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc`, `~/.codex/AGENTS.md` (oder die Dateien löschen, falls sie nur Hub-Inhalt hatten) |
+| Claude-Code-Mod | `devhub sync --global --ohne-mod` trägt ihn aus `~/.claude/settings.json` aus |
 | Registry & State | `rm -rf ~/.config/devhub ~/.local/state/devhub` |
 | Projekt-Verträge | Lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` - oder pro Projekt `devhub forget <ordner>` (entfernt Hub-Dateien, behält den Slot gesperrt). Alte `AGENTS.md`-Blöcke von früheren Syncs räumt Forget ebenfalls auf. |
 
