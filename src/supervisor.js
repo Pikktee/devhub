@@ -3,8 +3,10 @@ import { join, resolve } from 'node:path'
 import { logDir, repoRoot } from './paths.js'
 import * as registryStore from './registry.js'
 import * as stateStore from './state.js'
-import { describeProject } from './discovery.js'
-import { hostFor, portFor, urlFor, urlForRole } from './ports.js'
+import { describeProject, projectNameForPath, resolveProject } from './discovery.js'
+import { hostFor, portFor, urlFor, urlForRole, worktreePortFor } from './ports.js'
+import { listWorktrees } from './git.js'
+import { copyWorktreeData, missingPreparation } from './worktree.js'
 import { bindHostFor, networkHostFor } from './net.js'
 import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, probePort } from './probe.js'
 import { logLine, openLog, startProcess, stopGroup } from './runners/process.js'
@@ -33,8 +35,9 @@ function requireInstance(registry, name, profile) {
 function varsFor({ project, profile, spec, port, registry, slot }) {
   const suffix = registry.settings.domainSuffix
   const label = project.hostLabel || project.displayName || project.name
-  const frontendPort = portFor(slot, 'frontend')
-  const backendPort = portFor(slot, 'backend')
+  const bank = project.worktree ? worktreePortFor : portFor
+  const frontendPort = bank(slot, 'frontend')
+  const backendPort = bank(slot, 'backend')
   return {
     port,
     frontendPort,
@@ -101,8 +104,36 @@ function startOrder(specs) {
   return [...specs].sort((a, b) => rank(a.role) - rank(b.role))
 }
 
-export async function up(name, { profile = 'default', registry = registryStore.load() } = {}) {
+/** Worktrees laufen immer nur lokal, auch wenn die Netz-Freigabe an ist. */
+function settingsFor(project, registry) {
+  if (!project.worktree) return registry
+  return { ...registry, settings: { ...registry.settings, networkAccess: false } }
+}
+
+export async function up(name, { profile = 'default', registry = registryStore.load(), data = false } = {}) {
   const { project, slot, specs } = requireInstance(registry, name, profile)
+  registry = settingsFor(project, registry)
+
+  let copiedData = null
+  if (project.worktree) {
+    if (specs.some((s) => s.runner === 'compose')) {
+      throw new Error('Compose-Projekte lassen sich als Worktree noch nicht starten - feste Ports in der Compose-Datei kollidierten mit dem Hauptprojekt')
+    }
+    const steps = missingPreparation(project, specs)
+    if (steps.length) {
+      throw new Error(
+        `Der Worktree ist noch nicht vorbereitet. devhub richtet ihn nicht selbst ein, einmal ausführen:\n  ${steps.join('\n  ')}\ndanach erneut "devhub up ${project.path}".`
+      )
+    }
+    if (data) {
+      // Eine laufende Instanz hält die Datenbank offen - vorher stoppen.
+      await down(name, { profile, registry })
+      copiedData = await copyWorktreeData(project)
+    }
+  } else if (data) {
+    throw new Error('--daten gilt nur für Worktrees')
+  }
+
   const recorded = stateStore.get(name, profile)
   const warnings = []
   const started = []
@@ -225,6 +256,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     profile,
     processes,
     kept: kept.map((p) => p.name),
+    data: copiedData,
     warnings
   }
 }
@@ -320,6 +352,68 @@ export async function statusOf(registry, name, { withMemory = false } = {}) {
 
 export async function composeDetail(project, spec) {
   return composeServices({ cwd: resolve(project.path, spec.cwd ?? '.'), file: spec.composeFile })
+}
+
+async function slotBusy(slot) {
+  return (await probePort(worktreePortFor(slot, 'frontend'))) || (await probePort(worktreePortFor(slot, 'backend')))
+}
+
+/**
+ * Nimmt einen Worktree auf (oder findet seine bestehende Aufnahme) und liefert
+ * den Instanznamen `projekt@label`. `info` kommt aus `worktreeInfo()`.
+ */
+export async function registerWorktree(info) {
+  return registryStore.withLock(async () => {
+    const registry = registryStore.load()
+    const project = projectNameForPath(registry, info.mainPath)
+    if (!project) {
+      throw new Error(`Das Hauptprojekt ${info.mainPath} liegt in keinem Wurzelverzeichnis von devhub`)
+    }
+    const { name, created } = await registryStore.allocateWorktree(
+      registry,
+      { project, path: info.root, branch: info.branch, folder: info.folder },
+      { isBusy: slotBusy }
+    )
+    if (created) registryStore.save(registry, { worktrees: true })
+    return name
+  })
+}
+
+/** Ein nicht eingehängtes Volume ist kein gelöschter Worktree. */
+function onMissingVolume(path) {
+  const match = path.match(/^\/Volumes\/[^/]+/)
+  return Boolean(match) && !existsSync(match[0])
+}
+
+function staleWorktrees(registry) {
+  return Object.entries(registry.worktrees ?? {})
+    .filter(([, entry]) => {
+      const mainPath = registry.projects[entry.project]?.path ?? resolveProject(registry, entry.project)?.path
+      if (!mainPath || !existsSync(mainPath)) return false
+      if (onMissingVolume(entry.path)) return false
+      if (!existsSync(entry.path)) return true
+      return !listWorktrees(mainPath).some((w) => w.path === entry.path && !w.missing)
+    })
+    .map(([name]) => name)
+}
+
+/**
+ * Verschwundene Worktrees abräumen: Prozessgruppe stoppen, Platz freigeben.
+ * Läuft bei status, up und in der Übersicht statt in einer Schleife; ohne
+ * Fund wird weder gesperrt noch geschrieben.
+ */
+export async function pruneWorktrees({ registry = registryStore.load() } = {}) {
+  if (!staleWorktrees(registry).length) return []
+  // Unter der Sperre nur austragen; das Stoppen dauert und braucht sie nicht.
+  const stale = await registryStore.withLock(async () => {
+    const fresh = registryStore.load()
+    const found = staleWorktrees(fresh)
+    for (const name of found) registryStore.removeWorktree(fresh, name)
+    if (found.length) registryStore.save(fresh, { worktrees: true })
+    return found
+  })
+  for (const name of stale) await down(name, { registry })
+  return stale
 }
 
 export async function downAll({ registry = registryStore.load() } = {}) {

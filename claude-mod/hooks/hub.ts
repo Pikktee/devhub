@@ -26,6 +26,10 @@ export type ApiProject = {
   path: string
   adopted: boolean
   profiles: ApiProfile[]
+  /** Gesetzt bei Worktree-Instanzen: das Projekt, zu dem sie gehören. */
+  worktree?: { of: string; label: string } | null
+  /** Am Hauptprojekt: die Ordner seiner Git-Worktrees. */
+  worktrees?: string[]
 }
 
 export type Overview = {
@@ -34,12 +38,33 @@ export type Overview = {
   projects: ApiProject[]
 }
 
-/** Der Ordner, der den cwd am engsten umschließt; verschachtelte Projekte gewinnen. */
+const insideOf = (cwd: string) => (root: string) => cwd === root || cwd.startsWith(root.endsWith('/') ? root : `${root}/`)
+
+/**
+ * Der Ordner, der den cwd am engsten umschließt; verschachtelte Projekte
+ * gewinnen. Ein gestarteter Worktree ist ein eigener Eintrag mit eigenem Pfad
+ * und gewinnt damit gegen sein Hauptprojekt.
+ */
 export function projectForCwd(overview: Overview, cwd: string): ApiProject | undefined {
-  const inside = (root: string) => cwd === root || cwd.startsWith(root.endsWith('/') ? root : `${root}/`)
+  const inside = insideOf(cwd)
   return overview.projects
     .filter((p) => p.path && inside(p.path))
     .sort((a, b) => b.path.length - a.path.length)[0]
+}
+
+/**
+ * Liegt der cwd in einem Worktree, den devhub noch nicht kennt? Dann gehört die
+ * Sitzung nicht zum Hauptprojekt - dessen Adressen zeigten den falschen Code.
+ * Auch Worktrees außerhalb des Projektordners (/Volumes/…) werden so gefunden.
+ */
+export function pendingWorktree(overview: Overview, cwd: string): { project: ApiProject; path: string } | undefined {
+  const inside = insideOf(cwd)
+  const started = new Set(overview.projects.filter((p) => p.worktree).map((p) => p.path))
+  for (const project of overview.projects) {
+    const path = (project.worktrees ?? []).find((w) => inside(w) && !started.has(w))
+    if (path) return { project, path }
+  }
+  return undefined
 }
 
 /**
@@ -58,6 +83,22 @@ function stateOf(raw: string | undefined): DevhubState {
 }
 
 export function viewOf(overview: Overview, cwd: string): DevhubView | null {
+  const pending = pendingWorktree(overview, cwd)
+  if (pending) {
+    return {
+      name: '.',
+      displayName: `${pending.project.displayName ?? pending.project.name} · Worktree`,
+      adopted: true,
+      profile: 'default',
+      state: 'aus',
+      processes: [],
+      ports: [],
+      ownConflicts: 0,
+      hubConflicts: overview.conflicts.length,
+      worktreePending: true,
+      worktreePath: pending.path
+    }
+  }
   const project = projectForCwd(overview, cwd)
   if (!project) return null
   const profile = chosenProfile(project)
@@ -93,6 +134,7 @@ export function backendsOf(view: DevhubView): DevhubProcess[] {
 }
 
 function upCommand(view: DevhubView) {
+  if (view.worktreePending) return 'devhub up .'
   return view.profile === 'default' ? `devhub up ${view.name}` : `devhub up ${view.name} --profil ${view.profile}`
 }
 

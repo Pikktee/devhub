@@ -36,5 +36,10 @@ Verboten: `npm run dev`, `pnpm dev`, `yarn dev`, `bun dev`, `vite`, `next dev`,
 
 - `devhub up` ist idempotent, wenn der Server schon läuft.
 - Profil/Smoke: `devhub up <ordner> --profil smoke` (eigener Slot/Host).
+- Git-Worktree: im Worktree `devhub up .` - eigene Instanz `<ordner>@<branch>` mit
+  eigenen Ports (52NN/88NN) und Adresse `<branch>.<anzeigename>.localhost`. Danach
+  `devhub status .`, `devhub logs .`, `devhub down .`. Nennt `up` fehlende Schritte
+  (`.env`-Link, `npm ci`), diese ausführen und erneut starten. Daten aus dem
+  Hauptprojekt nur mit `devhub up . --daten`.
 - Fehlt `devhub` im PATH oder der Hub antwortet nicht: Nutzer kurz darauf hinweisen
   (`devhub service status` / launchd), nicht still auf `npm run dev` ausweichen.

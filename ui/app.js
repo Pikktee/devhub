@@ -1137,7 +1137,11 @@ function zeileHtml(projekt, profil) {
   })
 
   const art = projekt.stack?.framework ?? projekt.stack?.kind
-  const nameTitel = [art, profil.profile !== 'default' ? `Profil ${profil.profile}` : '']
+  const nameTitel = [
+    art,
+    profil.profile !== 'default' ? `Profil ${profil.profile}` : '',
+    projekt.worktree ? `Worktree von ${projekt.worktree.of}${projekt.worktree.branch ? ` · Branch ${projekt.worktree.branch}` : ''} · ${projekt.path}` : ''
+  ]
     .filter(Boolean)
     .join(' · ')
 
@@ -1158,7 +1162,9 @@ function zeileHtml(projekt, profil) {
       ? `<a class="adr${laeuft ? '' : ' aus'}" href="${h(adresse)}" target="_blank" rel="noreferrer">${h(adresse.replace(/^https?:\/\//, ''))}</a>`
       : '<span class="adr aus">-</span>'
 
-  return `<div class="zeile${konflikt ? ' warnung' : ''}" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">
+  // Worktree-Instanzen stehen eingerückt unter ihrem Projekt (die API liefert sie direkt dahinter).
+  const klassen = ['zeile', konflikt ? 'warnung' : '', projekt.worktree ? 'worktree' : ''].filter(Boolean).join(' ')
+  return `<div class="${klassen}" data-projekt="${h(projekt.name)}" data-profil="${h(profil.profile)}">
     <span class="${konflikt ? 'punkt warnung' : punktKlasse(profil.state)}"></span>
     <span class="power">${powerKnopfHtml(projekt, profil)}</span>
     ${nameHtml(projekt, '', { title: nameTitel || undefined })}
@@ -1204,6 +1210,7 @@ function rendereFuss() {
     teil(`<span class="fuss-host" title="Hub-Adresse">${h(location.host)}</span>`),
     teil(`<b>${s.total}</b> Projekte`),
     teil(`<b>${s.adopted}</b> mit Slot`),
+    s.worktrees ? teil(`<b>${s.worktrees}</b> Worktree${s.worktrees === 1 ? '' : 's'}`) : '',
     teil(`<b>${s.running}</b> laufen`),
     s.memory ? teil(`<b>${speicher(s.memory)}</b>`) : '',
     s.conflicts
@@ -1336,6 +1343,14 @@ function detailMenu(projekt, profil) {
   ]
   if (projekt.github?.url) {
     ort.push(menuLink('Auf GitHub öffnen', projekt.github.url, projekt.github.label))
+  }
+
+  // Ein Worktree hat keinen eigenen Titel und keine Agent-Dateien - nur Daten und Platz.
+  if (projekt.worktree) {
+    const verwaltung = [menuKnopf('Daten aus dem Hauptprojekt kopieren…', { aktion: 'worktree-daten', projekt: projekt.name })]
+    if (profil) verwaltung.push(menuKnopf('Neu starten', { aktion: 'neu', projekt: projekt.name, profil: profil.profile }))
+    const gefahr = [menuKnopf('Worktree-Platz freigeben…', { aktion: 'worktree-freigeben', projekt: projekt.name }, { gefahr: true })]
+    return aktionenMenu([ort, verwaltung, gefahr])
   }
 
   const verwaltung = [menuKnopf('Anzeigename ändern', { aktion: 'anzeigename', projekt: projekt.name })]
@@ -2784,6 +2799,21 @@ function baueProjektAktionen(projekt) {
       ausfuehren: () => window.open(projekt.github.url, '_blank', 'noopener')
     })
   }
+  if (projekt.worktree) {
+    push({
+      id: `projekt:${ordner}:worktree-freigeben`,
+      label: 'Worktree-Platz freigeben…',
+      hint: gruppe,
+      meta: 'worktree',
+      gruppe: 'Aktionen',
+      punkt,
+      projekt: ordner,
+      gefahr: true,
+      keywords: [...basis, 'worktree', 'freigeben', 'forget'],
+      ausfuehren: () => aktionAusfuehren('worktree-freigeben', { projekt: ordner })
+    })
+    return liste
+  }
   push({
     id: `projekt:${ordner}:anzeigename`,
     label: 'Anzeigename ändern',
@@ -3162,6 +3192,29 @@ async function aktionAusfuehren(aktion, kontext = {}, knopf = null) {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
         zeigeSyncBericht(ergebnis, { titel: `Agent-Dateien · ${projekt}` })
       })
+    case 'worktree-daten': {
+      const wahl = await frageBestaetigung({
+        titel: `Daten kopieren · ${projekt}`,
+        text: 'Ersetzt die Daten des Worktrees durch eine Kopie aus dem Hauptprojekt (worktree.daten in devhub.json). Eine laufende Instanz wird dafür neu gestartet.',
+        okLabel: 'Kopieren'
+      })
+      if (!wahl.ok) return
+      return handle(knopf, () => api(`/api/projects/${encodeURIComponent(projekt)}/up`, koerper({ data: true })))
+    }
+    case 'worktree-freigeben': {
+      const wahl = await frageBestaetigung({
+        titel: `Worktree-Platz freigeben · ${projekt}`,
+        text: 'Stoppt die Instanz und gibt ihre Ports frei. Der Worktree selbst bleibt unberührt; ein erneutes "devhub up ." nimmt ihn wieder auf.',
+        okLabel: 'Freigeben',
+        gefahr: true
+      })
+      if (!wahl.ok) return
+      return handle(knopf, async () => {
+        await api(`/api/projects/${encodeURIComponent(projekt)}/forget`, { method: 'POST', body: '{}' })
+        zustand.projekt = null
+        await geheZu('/', { ersetzen: true })
+      })
+    }
     case 'vergessen': {
       const wahl = await frageSlotEntfernen(projekt)
       if (!wahl.ok) return

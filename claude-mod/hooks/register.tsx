@@ -238,6 +238,7 @@ export const register: Register = (on) => {
         ? { name: v.name, profile: v.profile }
         : null
     if (!target) return { result: 'Diese Sitzung gehört zu keinem Projekt im Hub. Mit "project" ein Projekt (Ordnername) angeben.' }
+    if (!input.project && v?.worktreePending) return { result: 'Dieser Worktree läuft noch nicht unter devhub - es gibt keine Logs. Starten mit `devhub up .`.' }
     try {
       return { result: await logText($, target, input) }
     } catch (err) {
@@ -257,6 +258,22 @@ export const register: Register = (on) => {
       return { text: `http://devhub.localhost:${hubPort} geöffnet` }
     }
     if (!name) return { text: 'devhub: dieses Verzeichnis gehört zu keinem Projekt im Hub. `/devhub <befehl> <ordner>` nennt eines.' }
+
+    // Ein noch unbekannter Worktree hat keinen Namen im Hub; aufgenommen wird er über seinen Pfad.
+    if (!explicit && v?.worktreePending && verb !== 'status') {
+      if (verb !== 'up') return { text: 'devhub: dieser Worktree läuft noch nicht - erst `/devhub up`.' }
+      try {
+        const result = await hubJson<{ name: string; warnings?: unknown[] }>($, '/api/worktrees/up', {
+          method: 'POST',
+          body: { path: v.worktreePath }
+        })
+        const after = await refresh($)
+        const warnings = (result.warnings ?? []).map((w) => `  ⚠ ${typeof w === 'string' ? w : JSON.stringify(w)}`)
+        return { text: [`devhub ${result.name} gestartet`, ...warnings, after ? describe(after) : ''].filter(Boolean).join('\n') }
+      } catch (err) {
+        return { text: `devhub up: ${(err as Error).message}` }
+      }
+    }
 
     try {
       switch (verb) {

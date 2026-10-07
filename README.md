@@ -123,6 +123,7 @@ zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
 | `devhub setup [--wurzel …]` | Neuen Rechner einrichten |
 | `devhub status [projekt]` | Laufzustand, Ports, URLs |
 | `devhub up <projekt> [--profil p]` | Abgekoppelt starten |
+| `devhub up . [--daten]` | Den Worktree starten, in dem du stehst (siehe [Worktrees](#worktrees)) |
 | `devhub down <projekt>` / `--alle` | Prozessgruppe stoppen |
 | `devhub restart <projekt>` | Stoppen und starten |
 | `devhub logs <projekt> [-f] [-n 40]` | Server-Ausgabe |
@@ -130,6 +131,7 @@ zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
 | `devhub list` | Alle erkannten Projekte |
 | `devhub adopt <projekt>` | Slot vergeben |
 | `devhub forget <projekt>` | Aus der Registry (Slot bleibt gesperrt) |
+| `devhub forget <projekt@worktree>` | Worktree-Platz freigeben |
 | `devhub sync [--global]` | lokale Agent-Dateien / globale Regeln schreiben |
 | `devhub agents [projekt]` | Regeln / Skills / Memory anzeigen |
 | `devhub link [projekt]` | `AGENTS.md` ↔ `CLAUDE.md` verknüpfen |
@@ -139,8 +141,8 @@ zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
 | `devhub open [projekt]` | Browser (oder `--finder` / `--ordner`) |
 | `devhub reveal <projekt>` | Projektordner im Finder |
 
-Ohne Projektnamen gilt das Verzeichnis, in dem du stehst.
-`dev` ist Alias für `devhub`.
+Ohne Projektnamen gilt das Verzeichnis, in dem du stehst; statt des Namens geht
+auch ein Pfad (`devhub status .`). `dev` ist Alias für `devhub`.
 
 ---
 
@@ -161,6 +163,46 @@ macOS löst `*.localhost` ohne `/etc/hosts` und ohne Root auf. Der Port bleibt i
 der URL, damit HMR (Vite u. a.) funktioniert. Getrennte Hostnamen bedeuten auch
 getrennte Cookies - zwei Instanzen desselben Projekts überschreiben sich nicht
 mehr die Anmeldung.
+
+### Worktrees
+
+Agenten arbeiten oft in Git-Worktrees (`<projekt>/.claude/worktrees/<name>` oder
+irgendwo sonst). `devhub up .` im Worktree startet ihn als eigene Instanz neben
+dem Hauptprojekt:
+
+| | Hauptprojekt | Worktree |
+| --- | --- | --- |
+| Name | `journey` | `journey@optionen-runde-2` |
+| Ports | `51NN` / `87NN` | `52NN` / `88NN`, Plätze 10–29 |
+| Adresse | `maptale.localhost:5123` | `optionen-runde-2.maptale.localhost:5210` |
+| Netz | auf Wunsch im LAN | immer nur lokal |
+
+- Das Präfix der Adresse kommt aus dem **Branch** (letztes Segment, ohne `worktree-`),
+  bei detached HEAD aus dem Ordner. Es bleibt, auch wenn im Worktree später der Branch wechselt.
+- Worktree-Plätze werden **wiederverwendet**: sobald der Worktree verschwindet
+  (`git worktree remove`), räumen `devhub status`, `devhub up` und die Übersicht ihn ab
+  und stoppen seine Prozesse. Ein nicht eingehängtes Volume zählt nicht als verschwunden.
+- devhub **richtet den Worktree nicht ein**. Fehlen `.env` oder `node_modules`, bricht
+  `up` ab und nennt die fertigen Befehle (Symlink auf die `.env` des Hauptprojekts,
+  `npm ci` je Paketordner).
+- Ein Worktree startet mit **leeren Daten**. `devhub up . --daten` kopiert vorher die in
+  `devhub.json` unter `worktree.daten` genannten Pfade aus dem Hauptprojekt - SQLite per
+  `VACUUM INTO` (konsistent, auch während die Hauptinstanz schreibt), Ordner als APFS-Klon.
+  Erneut aufgerufen setzt es die Daten zurück; eine laufende Instanz wird dafür gestoppt.
+- `devhub.json` gilt immer die des **Hauptprojekts**. `worktree.env` überschreibt
+  Werte aus der `.env`, die auf die Hauptinstanz zeigen:
+
+```json
+{
+  "worktree": {
+    "daten": ["server/daten/maptale.db", "server/daten/tours"],
+    "env": { "MAPTALE_WEB_URL": "{frontendUrl}" }
+  }
+}
+```
+
+Compose-Projekte lassen sich (noch) nicht als Worktree starten: feste Ports in der
+Compose-Datei kollidierten mit dem Hauptprojekt.
 
 ### Im lokalen Netzwerk (Handy, Tablet, zweiter Rechner)
 
@@ -280,7 +322,10 @@ Unterordner einzeln aufnehmen: `devhub adopt monorepo/app`.
 
 ### Optional: `devhub.json`
 
-Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle):
+Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle). Abgeleitete
+Profile bleiben die Grundlage: ein Profil in der Datei ersetzt nur das gleichnamige.
+Eine Datei ohne `profiles` ist gültig und ergänzt nur (`displayName`, `worktree`).
+Unbekannte Schlüssel erscheinen als Hinweis.
 
 ```json
 {
@@ -303,7 +348,7 @@ Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle):
 }
 ```
 
-Platzhalter: `{port}`, `{host}`, `{bindHost}`, `{url}`, `{backendUrl}`, `{project}`, `{profile}`, `{path}`  
+Platzhalter: `{port}`, `{host}`, `{bindHost}`, `{url}`, `{frontendUrl}`, `{backendUrl}`, `{project}`, `{profile}`, `{path}`  
 (deutsche Schlüsselnamen werden ebenso akzeptiert.)
 
 Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)

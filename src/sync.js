@@ -138,6 +138,14 @@ auch nicht „kurz zum Testen“.
 4. \`devhub logs <ordner>\` - Log lesen bei Fehlern.
 5. Übersicht: http://devhub.localhost:4000
 
+### Worktrees
+In einem Git-Worktree startet \`devhub up .\` eine eigene Instanz mit eigenen Ports
+und eigener Adresse (\`<branch>.<anzeigename>.localhost\`); \`devhub status .\`,
+\`devhub logs .\` und \`devhub down .\` gelten dann ihr. Nie das Hauptprojekt starten,
+um einen Worktree zu prüfen - es zeigt den falschen Code. Fehlen \`.env\` oder
+\`node_modules\`, nennt \`devhub up .\` die Befehle; Daten aus dem Hauptprojekt
+nur auf Wunsch mit \`devhub up . --daten\`.
+
 ### Adressen
 Die URL kommt aus dem **Anzeigenamen** (\`http://maptale.localhost:5120\`),
 der CLI-Schlüssel bleibt der **Ordner** (\`devhub up journey\`). Bei \`devhub status\`

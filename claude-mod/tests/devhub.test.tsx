@@ -10,12 +10,14 @@ import type { Engine } from 'claude-code/testing'
 type FakeHub = {
   reachable: boolean
   journeyState: 'läuft' | 'teilweise' | 'gestoppt'
+  worktreeStarted: boolean
   posts: string[]
   statuses: (string | undefined)[]
   opened: string[][]
 }
 
 const ROOT = '/Users/test/Dev'
+const WORKTREE = `${ROOT}/journey/.claude/worktrees/optionen`
 
 function overview(hub: FakeHub) {
   const listening = hub.journeyState === 'läuft'
@@ -29,6 +31,7 @@ function overview(hub: FakeHub) {
         displayName: 'Maptale',
         path: `${ROOT}/journey`,
         adopted: true,
+        worktrees: [WORKTREE],
         profiles: [
           {
             profile: 'default',
@@ -47,6 +50,26 @@ function overview(hub: FakeHub) {
           }
         ]
       },
+      ...(hub.worktreeStarted
+        ? [
+            {
+              name: 'journey@optionen',
+              displayName: 'Maptale · optionen',
+              path: WORKTREE,
+              adopted: true,
+              worktree: { of: 'journey', label: 'optionen' },
+              profiles: [
+                {
+                  profile: 'default',
+                  state: 'läuft',
+                  processes: [
+                    { name: 'web', role: 'frontend', port: 5210, url: 'http://optionen.maptale.localhost:5210', listening: true, foreign: false }
+                  ]
+                }
+              ]
+            }
+          ]
+        : []),
       {
         name: 'onwriting',
         displayName: 'Patina',
@@ -65,7 +88,7 @@ function overview(hub: FakeHub) {
 }
 
 function fakeHub(on: On, { cwd = `${ROOT}/journey/src`, reachable = true } = {}): FakeHub {
-  const hub: FakeHub = { reachable, journeyState: 'läuft', posts: [], statuses: [], opened: [] }
+  const hub: FakeHub = { reachable, journeyState: 'läuft', worktreeStarted: false, posts: [], statuses: [], opened: [] }
   mock.env(on, { HOME: '/Users/test' })
   mock.clock(on)
   on('fs.read', ($, e) => {
@@ -91,6 +114,11 @@ function fakeHub(on: On, { cwd = `${ROOT}/journey/src`, reachable = true } = {})
     expect(url.host).toBe('127.0.0.1:4100')
     const json = (body: unknown, status = 200) => ({ value: { status, ok: status < 300, headers: {}, text: JSON.stringify(body) } })
     if (url.pathname === '/api/overview') return json(overview(hub))
+    if (url.pathname === '/api/worktrees/up' && e.init?.method === 'POST') {
+      hub.posts.push(`worktree-up ${e.init.body}`)
+      hub.worktreeStarted = true
+      return json({ name: 'journey@optionen', ok: true, warnings: [] })
+    }
     const action = url.pathname.match(/^\/api\/projects\/([^/]+)\/(up|down|restart)$/)
     if (action && e.init?.method === 'POST') {
       hub.posts.push(`${action[2]} ${action[1]} ${e.init.body}`)
@@ -296,5 +324,40 @@ describe('/devhub', () => {
     await start($)
     const out = await $.command.run({ command: 'devhub', args: 'status' } as never)
     expect(out.text).toContain('kein Hub')
+  })
+})
+
+describe('Worktrees', () => {
+  const imWorktree = ($: Engine) => $.session.start({ cwd: `${WORKTREE}/src`, surface: 'terminal', isInteractive: true })
+
+  test('ein noch unbekannter Worktree zeigt nicht das Hauptprojekt', async ($, on) => {
+    const hub = fakeHub(on, { cwd: `${WORKTREE}/src` })
+    on('tool.call', () => ({ result: { stdout: 'sollte nie laufen' } }))
+    await imWorktree($)
+    expect(hub.statuses.at(-1)).toBe('devhub ○ aus · Maptale · Worktree · devhub up .')
+    const ran = await $.tool.call({ tool: 'Bash', command: 'npm run dev' })
+    expect(ran.deny).toContain('devhub up .')
+    expect(ran.deny).not.toContain('maptale.localhost:5123')
+  })
+
+  test('/devhub up nimmt ihn über den Pfad auf', async ($, on) => {
+    const hub = fakeHub(on, { cwd: `${WORKTREE}/src` })
+    await imWorktree($)
+    const out = await $.command.run({ command: 'devhub', args: 'up' } as never)
+    expect(hub.posts).toEqual([`worktree-up {"path":"${WORKTREE}"}`])
+    expect(out.text).toContain('journey@optionen gestartet')
+  })
+
+  test('ein gestarteter Worktree hat seine eigenen Adressen', async ($, on) => {
+    const hub = fakeHub(on, { cwd: `${WORKTREE}/src` })
+    hub.worktreeStarted = true
+    on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+    await imWorktree($)
+    expect(hub.statuses.at(-1)).toBe('devhub ● läuft · Maptale · optionen · http://optionen.maptale.localhost:5210')
+    const { blocks } = await $.prompt.context({ blocks: [] })
+    const text = blocks.find((b) => b.name === 'devhub')?.text ?? ''
+    expect(text).toContain('http://optionen.maptale.localhost:5210')
+    expect(text).toContain('devhub down journey@optionen')
+    expect(text).not.toContain('5123')
   })
 })

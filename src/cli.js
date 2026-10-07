@@ -1,10 +1,22 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import * as registryStore from './registry.js'
+import { expandPath } from './registry.js'
 import * as stateStore from './state.js'
-import { describeProject, listProjects, scanRoots } from './discovery.js'
-import { down, downAll, logFileFor, restart, statusOf, tailLog, up } from './supervisor.js'
+import { describeProject, listProjects, projectIndex, projectNameForPath, scanRoots } from './discovery.js'
+import {
+  down,
+  downAll,
+  logFileFor,
+  pruneWorktrees,
+  registerWorktree,
+  restart,
+  statusOf,
+  tailLog,
+  up
+} from './supervisor.js'
+import { worktreeInfo } from './git.js'
 import { listenerOn, probePort } from './probe.js'
 import { agentContext, readAgentFile } from './agents.js'
 import { inspectLink, linkRuleFiles } from './adapters/link.js'
@@ -14,7 +26,7 @@ import { installService, serviceStatus, uninstallService } from './service.js'
 import { startHub } from './server/index.js'
 import { runSetup } from './setup.js'
 import { color, dateTime, duration, table } from './util/fmt.js'
-import { portFor } from './ports.js'
+import { portFor, worktreePortFor } from './ports.js'
 import { networkHostFor } from './net.js'
 
 const ALIASES = {
@@ -52,10 +64,11 @@ const ALIASES = {
   p: 'profile',
   wurzel: 'wurzel',
   root: 'wurzel',
-  w: 'wurzel'
+  w: 'wurzel',
+  daten: 'data'
 }
 
-const BOOLEAN_FLAGS = new Set(['all', 'follow', 'dryRun', 'global', 'noGlobal', 'hook', 'noMod', 'json', 'help', 'finder', 'on', 'off', 'keepFiles', 'cleanDeps'])
+const BOOLEAN_FLAGS = new Set(['all', 'follow', 'dryRun', 'global', 'noGlobal', 'hook', 'noMod', 'json', 'help', 'finder', 'on', 'off', 'keepFiles', 'cleanDeps', 'data'])
 
 export function parseArgs(argv) {
   const positionals = []
@@ -96,8 +109,42 @@ function fail(message) {
   process.exitCode = 1
 }
 
-function resolveName(registry, given) {
-  if (given) return given
+const looksLikePath = (given) => given === '.' || given === '..' || given.includes('/') || given.startsWith('~')
+
+function projectAbove(registry, dir) {
+  const index = projectIndex(registry)
+  for (let cur = dir; ; cur = dirname(cur)) {
+    const name = projectNameForPath(registry, cur, index)
+    if (name) return name
+    if (dirname(cur) === cur) return null
+  }
+}
+
+/**
+ * Projekt oder Worktree-Instanz zu einem Argument. Ohne Argument oder mit Pfad
+ * (auch `.`) entscheidet Git: in einem Worktree ist der Ordnername nicht der
+ * Projektname - hieße er zufällig wie ein Projekt, träfe man das Hauptprojekt.
+ * `register` nimmt einen unbekannten Worktree auf (nur bei up); `worktrees:
+ * false` für Befehle, die nur Projekte kennen.
+ */
+async function resolveName(registry, given, { register = false, worktrees = true } = {}) {
+  if (given && !looksLikePath(given)) return given
+  const dir = given ? resolve(expandPath(given)) : process.cwd()
+  const info = worktreeInfo(dir)
+  if (info?.isWorktree) {
+    if (!worktrees) return null
+    const known = registryStore.worktreeByPath(registry, info.root)
+    if (known) return known
+    if (!register) {
+      throw new Error(`Der Worktree ${info.root} ist in devhub noch nicht aufgenommen - "devhub up ${given ?? '.'}" startet ihn`)
+    }
+    return registerWorktree(info)
+  }
+  const byPath = projectAbove(registry, dir)
+  if (byPath || given) {
+    if (!byPath) throw new Error(`${dir} gehört zu keinem Projekt von devhub`)
+    return byPath
+  }
   const here = basename(process.cwd())
   if (registry.projects[here] || scanRoots(registry.settings.roots).some((p) => p.name === here)) return here
   return null
@@ -106,9 +153,11 @@ function resolveName(registry, given) {
 // ---------------------------------------------------------------- status
 
 async function cmdStatus(positionals, flags) {
+  const removed = await pruneWorktrees()
+  for (const name of removed) console.log(color.dim(`○ ${name} abgeräumt - der Worktree existiert nicht mehr`))
   const registry = registryStore.load()
-  const only = positionals[0]
-  const names = only ? [only] : Object.keys(registry.projects)
+  const only = positionals[0] ? await resolveName(registry, positionals[0]) : null
+  const names = only ? [only] : [...Object.keys(registry.projects), ...Object.keys(registry.worktrees)]
 
   if (!names.length) {
     console.log('Noch kein Projekt aufgenommen. "devhub list" zeigt die Kandidaten, "devhub adopt <projekt>" vergibt einen Slot.')
@@ -163,7 +212,14 @@ async function cmdStatus(positionals, flags) {
     console.log(color.dim('\nProzesse'))
     for (const line of details) console.log(line)
   }
-  if (!only) console.log(color.dim(`\n${names.length} aufgenommen · ${running} laufen`))
+  const worktreeCount = Object.keys(registry.worktrees).length
+  if (!only) {
+    console.log(
+      color.dim(
+        `\n${names.length - worktreeCount} aufgenommen${worktreeCount ? ` · ${worktreeCount} Worktree${worktreeCount === 1 ? '' : 's'}` : ''} · ${running} laufen`
+      )
+    )
+  }
 }
 
 // ---------------------------------------------------------------- up/down
@@ -179,12 +235,15 @@ function netzZeilen(proc) {
 }
 
 async function cmdUp(positionals, flags) {
-  const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  await pruneWorktrees()
+  const name = await resolveName(registryStore.load(), positionals[0], { register: true })
   if (!name) return fail('Kein Projekt angegeben und das aktuelle Verzeichnis ist keins.')
   const profile = flags.profile ?? 'default'
+  const registry = registryStore.load()
 
-  const result = await up(name, { profile, registry })
+  const result = await up(name, { profile, registry, data: Boolean(flags.data) })
+  for (const item of result.data?.copied ?? []) console.log(`${color.dim('↳')} kopiert: ${item}`)
+  for (const item of result.data?.skipped ?? []) console.warn(color.yellow('! ') + `übersprungen: ${item}`)
   if (!result.changed && result.processes.length) {
     console.log(`${color.dim('○')} ${name}/${profile} läuft bereits - nichts zu tun`)
   }
@@ -205,7 +264,7 @@ async function cmdDown(positionals, flags) {
     for (const result of results) console.log(`${color.dim('○')} ${result.project}/${result.profile} gestoppt`)
     return
   }
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0])
   if (!name) return fail('Kein Projekt angegeben. "devhub down --alle" stoppt alles.')
   const result = await down(name, { profile: flags.profile ?? 'default', registry })
   if (!result.known) return console.log(`${name}/${flags.profile ?? 'default'} war nicht als laufend vermerkt.`)
@@ -215,9 +274,9 @@ async function cmdDown(positionals, flags) {
 
 async function cmdRestart(positionals, flags) {
   const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0])
   if (!name) return fail('Kein Projekt angegeben.')
-  const result = await restart(name, { profile: flags.profile ?? 'default', registry })
+  const result = await restart(name, { profile: flags.profile ?? 'default', registry, data: Boolean(flags.data) })
   for (const proc of result.processes) {
     console.log(`${color.green('●')} ${name}/${proc.name} → ${color.blue(proc.url)}`)
     for (const zeile of netzZeilen(proc)) console.log(zeile)
@@ -229,7 +288,7 @@ async function cmdRestart(positionals, flags) {
 
 async function cmdLogs(positionals, flags) {
   const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0])
   if (!name) return fail('Kein Projekt angegeben.')
   const profile = flags.profile ?? 'default'
   const project = describeProject(registry, name)
@@ -269,8 +328,19 @@ async function cmdPorts() {
       ])
     }
   }
+  for (const [name, entry] of Object.entries(registry.worktrees).sort((a, b) => a[0].localeCompare(b[0], 'de'))) {
+    const frontend = worktreePortFor(entry.slot, 'frontend')
+    const backend = worktreePortFor(entry.slot, 'backend')
+    rows.push([
+      name,
+      color.dim('worktree'),
+      String(entry.slot),
+      (await probePort(frontend)) ? color.green(String(frontend)) : String(frontend),
+      (await probePort(backend)) ? color.green(String(backend)) : color.dim(String(backend))
+    ])
+  }
   console.log(table(rows, { head: ['PROJEKT', 'PROFIL', 'SLOT', 'FRONTEND', 'BACKEND'] }))
-  console.log(color.dim('\nGrün = belegt. Frontend 51NN, Backend 87NN - die Nummer verrät den Slot.'))
+  console.log(color.dim('\nGrün = belegt. Frontend 51NN, Backend 87NN - die Nummer verrät den Slot. Worktrees: 52NN / 88NN.'))
 }
 
 async function cmdList() {
@@ -338,9 +408,20 @@ async function cmdAdopt(positionals, flags) {
 }
 
 async function cmdForget(positionals, flags) {
+  const given = positionals[0]
+  if (!given) return fail('Aufruf: dev forget <projekt>')
+  const name = await resolveName(registryStore.load(), given)
+  if (registryStore.load().worktrees[name]) {
+    await down(name)
+    await registryStore.withLock(async () => {
+      const fresh = registryStore.load()
+      registryStore.removeWorktree(fresh, name)
+      registryStore.save(fresh, { worktrees: true })
+    })
+    console.log(`${color.dim('○')} ${name} entfernt - der Platz ist wieder frei, der Worktree selbst bleibt unberührt.`)
+    return
+  }
   const registry = registryStore.load()
-  const name = positionals[0]
-  if (!name) return fail('Aufruf: dev forget <projekt>')
   if (!registry.projects[name]) return fail(`${name} war nicht aufgenommen`)
   const slot = registry.projects[name].slot
   const projectPath = registry.projects[name].path
@@ -402,7 +483,7 @@ async function cmdSync(positionals, flags) {
 
 async function cmdAgents(positionals, flags) {
   const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0], { worktrees: false })
   if (!name) return fail('Kein Projekt angegeben.')
   const project = describeProject(registry, name)
   if (!project) return fail(`${name} ist unbekannt`)
@@ -466,7 +547,7 @@ const LINK_MARKER = {
 async function cmdLink(positionals, flags) {
   const registry = registryStore.load()
   const dryRun = Boolean(flags.dryRun)
-  const einzeln = positionals[0] ?? (flags.all ? null : resolveName(registry, null))
+  const einzeln = positionals[0] ?? (flags.all ? null : await resolveName(registry, null, { worktrees: false }))
 
   if (!einzeln && !flags.all) {
     const rows = listProjects(registry)
@@ -623,7 +704,7 @@ function revealInFinder(project) {
 
 async function cmdReveal(positionals) {
   const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0])
   if (!name) return fail('Projekt angeben (oder im Projektordner stehen)')
   const project = describeProject(registry, name)
   if (!project) return fail(`Unbekanntes Projekt ${name}`)
@@ -632,7 +713,7 @@ async function cmdReveal(positionals) {
 
 async function cmdOpen(positionals, flags) {
   const registry = registryStore.load()
-  const name = resolveName(registry, positionals[0])
+  const name = await resolveName(registry, positionals[0])
   if (flags.finder) {
     if (!name) return fail('Projekt angeben (oder im Projektordner stehen)')
     const project = describeProject(registry, name)
@@ -658,12 +739,15 @@ const HELP = `devhub - die Dev-Server gehören dem Hub, nicht der Sitzung
 
   devhub status [projekt]              was läuft, auf welcher Nummer
   devhub up <projekt> [--profil p]     abgekoppelt starten (idempotent)
+  devhub up . [--daten]                Worktree starten (eigener Platz, eigene Adresse, nur lokal);
+                                       --daten kopiert vorher die Daten aus dem Hauptprojekt
   devhub down <projekt> | --alle       Prozessgruppe stoppen
   devhub restart <projekt>             stoppen und starten
   devhub logs <projekt> [-f] [-n 40]   Ausgabe des Servers
   devhub ports                         Slot- und Portvergabe
   devhub list                          alle erkannten Projekte
   devhub adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
+  devhub forget <projekt@worktree>     Worktree-Platz freigeben
   devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; lokale Hub-Dateien werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
   devhub sync [--projekt x] [--global] lokale Agent-Dateien schreiben (--probelauf zeigt nur)
                                        --global trägt den Claude-Code-Mod ein; --ohne-mod --hook nimmt stattdessen den Bash-Hook
@@ -676,7 +760,9 @@ const HELP = `devhub - die Dev-Server gehören dem Hub, nicht der Sitzung
   devhub open [projekt]                im Browser öffnen (--finder / --ordner: Ordner im Finder)
   devhub reveal <projekt>              Projektordner im Finder zeigen
 
-Ports: Frontend 51NN, Backend 87NN, NN = Slot. Adressen: <projekt>.localhost:<port>.
+Ports: Frontend 51NN, Backend 87NN, NN = Slot; Worktrees 52NN / 88NN.
+Adressen: <projekt>.localhost:<port>, Worktrees <branch>.<projekt>.localhost:<port>.
+Statt <projekt> geht auch ein Pfad (z. B. .) - in einem Worktree trifft das dessen Instanz.
 `
 
 const COMMANDS = {

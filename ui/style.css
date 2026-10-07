@@ -658,6 +658,13 @@ body::before {
   z-index: 0;
 }
 .zeile:last-child { border-bottom: 0; }
+.zeile.worktree .name-text { padding-left: 1.1rem; position: relative; }
+.zeile.worktree .name-text::before {
+  content: '↳';
+  position: absolute;
+  left: 0;
+  color: var(--text-leise);
+}
 .zeile:hover { background: var(--flaeche-hover); }
 .zeile:has(details.menu[open]) { z-index: 50; }
 .zeile.warnung {

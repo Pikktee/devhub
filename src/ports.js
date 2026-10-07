@@ -9,6 +9,15 @@ export const SLOT_MAX = 99
 
 export const ROLES = Object.keys(PORT_BANKS)
 
+/**
+ * Worktrees bekommen eigene Bänke, deren Plätze wiederverwendet werden: Worktrees
+ * sind kurzlebig und würden die 90 Projekt-Slots sonst in wenigen Wochen
+ * aufbrauchen. 5210 ist Worktree-Platz 10, Frontend.
+ */
+export const WORKTREE_BANKS = { frontend: 5200, backend: 8800 }
+export const WORKTREE_SLOT_MIN = 10
+export const WORKTREE_SLOT_MAX = 29
+
 export function assertSlot(slot) {
   if (!Number.isInteger(slot) || slot < SLOT_MIN || slot > SLOT_MAX) {
     throw new Error(`Slot ${slot} liegt außerhalb von ${SLOT_MIN}–${SLOT_MAX}`)
@@ -23,10 +32,23 @@ export function portFor(slot, role = 'frontend') {
   return bank + slot
 }
 
+export function worktreePortFor(slot, role = 'frontend') {
+  if (!Number.isInteger(slot) || slot < WORKTREE_SLOT_MIN || slot > WORKTREE_SLOT_MAX) {
+    throw new Error(`Worktree-Platz ${slot} liegt außerhalb von ${WORKTREE_SLOT_MIN}–${WORKTREE_SLOT_MAX}`)
+  }
+  const bank = WORKTREE_BANKS[role]
+  if (!bank) throw new Error(`Unbekannte Rolle "${role}" - erlaubt sind ${ROLES.join(', ')}`)
+  return bank + slot
+}
+
 export function describePort(port) {
   for (const [role, bank] of Object.entries(PORT_BANKS)) {
     const slot = port - bank
     if (slot >= SLOT_MIN && slot <= SLOT_MAX) return { role, slot }
+  }
+  for (const [role, bank] of Object.entries(WORKTREE_BANKS)) {
+    const slot = port - bank
+    if (slot >= WORKTREE_SLOT_MIN && slot <= WORKTREE_SLOT_MAX) return { role, slot, worktree: true }
   }
   return null
 }
@@ -44,9 +66,16 @@ export function slugifyLabel(text) {
 /**
  * Host aus dem Anzeigenamen (nicht dem Ordner): maptale.localhost,
  * maptale-smoke.localhost - trennt Cookie-Jars zwischen Profilen.
+ * Ein Punkt im Label bleibt eine Ebene: Worktrees heißen
+ * `optionen-runde-2.maptale.localhost`.
  */
 export function hostFor(label, profile = 'default', suffix = 'localhost') {
-  const base = slugifyLabel(label) || 'projekt'
+  const base =
+    String(label ?? '')
+      .split('.')
+      .map(slugifyLabel)
+      .filter(Boolean)
+      .join('.') || 'projekt'
   const host = profile === 'default' ? base : `${base}-${slugifyLabel(profile) || 'profil'}`
   return `${host}.${suffix}`
 }

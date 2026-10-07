@@ -1,10 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join, normalize, sep } from 'node:path'
 import { readJson } from './util/json.js'
-import { portFor, slugifyLabel, urlForRole } from './ports.js'
+import { portFor, slugifyLabel, urlForRole, worktreePortFor } from './ports.js'
 import { BIND_ALL, networkUrlFor } from './net.js'
 import { repoRoot } from './paths.js'
-import { githubInfoFor } from './git.js'
+import { githubInfoFor, listWorktrees, realPath } from './git.js'
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', '__pycache__'])
 const SUBDIR_CANDIDATES = ['web', 'app', 'frontend', 'client', 'site', 'landing', 'ui']
@@ -119,22 +119,82 @@ function findDevhubConfigFile(dir) {
   return null
 }
 
+const DEVJSON_KEYS = new Set(['$schema', 'profiles', 'profile', 'displayName', 'title', 'name', 'worktree'])
+const WORKTREE_KEYS = new Set(['daten', 'data', 'env'])
+
 /** Der Plan schreibt `profile`/`rolle`, englische Schlüssel sind ebenso erlaubt -
- *  eine Datei, die schon existiert, soll nicht an einer Vokabel scheitern. */
+ *  eine Datei, die schon existiert, soll nicht an einer Vokabel scheitern.
+ *  `profiles` ist optional: eine Datei ohne Profile ergänzt nur (Titel, Worktree),
+ *  die Profile werden dann weiter abgeleitet. */
 export function readDevJson(dir) {
   const file = findDevhubConfigFile(dir)
   if (!file) return null
   const raw = readJson(file)
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${file}: erwartet ein Objekt`)
+  const name = basename(file)
+  // Ein Tippfehler wie `worktre` soll auffallen, statt still nichts zu bewirken.
+  const warnings = Object.keys(raw)
+    .filter((key) => !DEVJSON_KEYS.has(key))
+    .map((key) => `${name}: unbekannter Schlüssel "${key}" wird ignoriert`)
+
   const profilesRaw = raw.profiles ?? raw.profile
-  if (!profilesRaw || typeof profilesRaw !== 'object') {
-    throw new Error(`${file}: erwartet ein Objekt "profiles" (oder "profile")`)
+  if (profilesRaw !== undefined && (!profilesRaw || typeof profilesRaw !== 'object' || Array.isArray(profilesRaw))) {
+    throw new Error(`${file}: "profiles" muss ein Objekt sein`)
   }
   const profiles = {}
-  for (const [profile, specs] of Object.entries(profilesRaw)) {
+  for (const [profile, specs] of Object.entries(profilesRaw ?? {})) {
     if (!Array.isArray(specs)) throw new Error(`${file}: Profil "${profile}" muss eine Liste sein`)
     profiles[profile] = specs.map(normalizeSpec)
   }
-  return { profiles, defaults: raw.env ?? {}, file }
+
+  let worktree = null
+  if (raw.worktree !== undefined) {
+    if (!raw.worktree || typeof raw.worktree !== 'object' || Array.isArray(raw.worktree)) {
+      throw new Error(`${file}: "worktree" muss ein Objekt sein`)
+    }
+    for (const key of Object.keys(raw.worktree)) {
+      if (!WORKTREE_KEYS.has(key)) warnings.push(`${name}: unbekannter Schlüssel "worktree.${key}" wird ignoriert`)
+    }
+    const daten = raw.worktree.daten ?? raw.worktree.data ?? []
+    if (!Array.isArray(daten) || daten.some((d) => typeof d !== 'string')) {
+      throw new Error(`${file}: "worktree.daten" muss eine Liste von Pfaden sein`)
+    }
+    const env = raw.worktree.env ?? {}
+    if (typeof env !== 'object' || Array.isArray(env)) throw new Error(`${file}: "worktree.env" muss ein Objekt sein`)
+    worktree = { daten, env }
+  }
+
+  return { profiles, worktree, warnings, file }
+}
+
+/**
+ * Abgeleitete Profile sind die Grundlage, ein Profil aus devhub.json ersetzt nur
+ * das gleichnamige. Wer ein Profil `smoke` einträgt, verliert so nicht still das
+ * abgeleitete `default`.
+ */
+function mergedProfiles(dir, stack, { network, problems }) {
+  let devJson = null
+  try {
+    devJson = readDevJson(dir)
+  } catch (err) {
+    problems.push(err.message)
+  }
+  problems.push(...(devJson?.warnings ?? []))
+
+  const inferred = inferProfiles(dir, stack, { network }) ?? {}
+  const profiles = {}
+  const sources = {}
+  for (const [profile, specs] of Object.entries(inferred)) {
+    profiles[profile] = specs
+    sources[profile] = 'abgeleitet'
+  }
+  for (const [profile, specs] of Object.entries(devJson?.profiles ?? {})) {
+    profiles[profile] = specs
+    sources[profile] = basename(devJson.file)
+  }
+  const distinct = [...new Set(Object.values(sources))]
+  const source = distinct.length ? distinct.join(' + ') : 'unbekannt'
+  return { profiles, sources, source, devJson }
 }
 
 /**
@@ -484,6 +544,19 @@ export function resolveProject(registry, name) {
   return { name, path: hit.path, slot: undefined, profileSlots: {}, adopted: false }
 }
 
+/** Ordner → Projektname, vorab mit echten Pfaden: wer viele Ordner nachschlägt,
+ *  liest die Wurzeln so nur einmal. Aufgenommene Projekte gewinnen. */
+export function projectIndex(registry) {
+  const index = new Map()
+  for (const found of scanRoots(registry.settings.roots)) index.set(realPath(found.path), found.name)
+  for (const [name, entry] of Object.entries(registry.projects)) index.set(realPath(entry.path), name)
+  return index
+}
+
+export function projectNameForPath(registry, path, index = projectIndex(registry)) {
+  return index.get(realPath(path)) ?? null
+}
+
 /**
  * Host-Label aus Anzeigename; bei Kollision mit einem anderen Projekt der Ordner.
  * CLI-Identität bleibt der Ordnername - nur die Adresse folgt dem Titel.
@@ -517,6 +590,7 @@ export function hostLabelFor(registry, name, displayName) {
  * daraus folgen und was fehlt, um es starten zu können.
  */
 export function describeProject(registry, name) {
+  if (registry.worktrees?.[name]) return describeWorktree(registry, name)
   const base = resolveProject(registry, name)
   if (!base) return null
 
@@ -546,33 +620,16 @@ export function describeProject(registry, name) {
   const stack = detectStack(base.path)
   const github = githubInfoFor(base.path)
   const problems = []
-  let profiles = {}
-  let source = 'unbekannt'
-
-  try {
-    const devJson = readDevJson(base.path)
-    if (devJson) {
-      profiles = devJson.profiles
-      source = basename(devJson.file)
-    }
-  } catch (err) {
-    problems.push(err.message)
-  }
-
-  if (source === 'unbekannt') {
-    const inferred = inferProfiles(base.path, stack, { network: Boolean(registry.settings.networkAccess) })
-    if (inferred) {
-      profiles = inferred
-      source = 'abgeleitet'
-    } else {
-      problems.push(diagnose(base.path, stack))
-    }
-  }
+  const { profiles, sources, source } = mergedProfiles(base.path, stack, {
+    network: Boolean(registry.settings.networkAccess),
+    problems
+  })
+  if (!Object.keys(profiles).length) problems.push(diagnose(base.path, stack))
 
   // Ohne venv landet man oft bei ModuleNotFoundError - lieber vorher sagen.
   if (
     stack.kind === 'python' &&
-    source === 'abgeleitet' &&
+    sources.default === 'abgeleitet' &&
     existsSync(join(base.path, 'requirements.txt')) &&
     !hasPythonVenv(base.path)
   ) {
@@ -611,9 +668,107 @@ export function describeProject(registry, name) {
     stack,
     profiles: resolved,
     source,
+    sources,
     problems,
-    github
+    github,
+    worktrees: listWorktrees(base.path)
+      .filter((w) => !w.missing)
+      .map((w) => w.path)
   }
+}
+
+/** Nur Pfade innerhalb des Projekts: ein `..` oder ein absoluter Pfad führte hinaus. */
+export function safeRelative(rel) {
+  if (typeof rel !== 'string' || !rel.trim() || isAbsolute(rel)) return null
+  const clean = normalize(rel)
+  if (clean === '.' || clean.split(sep).includes('..')) return null
+  return clean
+}
+
+/**
+ * Eine Worktree-Instanz sieht aus wie ein Projekt mit genau dem Profil
+ * `default`: Profile aus dem Worktree-Ordner abgeleitet, devhub.json aber aus
+ * dem Hauptprojekt (ein älterer Branch hat die Datei womöglich noch nicht, und
+ * die Quelle der Daten liegt ohnehin dort). Immer nur lokal erreichbar:
+ * ungeprüfter Branch-Code gehört nicht ins WLAN.
+ */
+function describeWorktree(registry, name) {
+  const wt = registry.worktrees[name]
+  const main = describeProject(registry, wt.project)
+  const problems = []
+  const mainLabel = main?.hostLabel ?? slugifyLabel(wt.project)
+  const hostLabel = `${wt.label}.${mainLabel}`
+  const displayName = `${main?.displayName ?? wt.project} · ${wt.label}`
+  const base = {
+    name,
+    path: wt.path,
+    slot: wt.slot,
+    profileSlots: {},
+    adopted: true,
+    displayName,
+    hostLabel,
+    suggestedDisplayName: null,
+    github: main?.github ?? null,
+    worktree: { of: wt.project, label: wt.label, branch: wt.branch, mainPath: main?.path ?? null },
+    worktrees: []
+  }
+  if (!main) {
+    return { ...base, stack: { kind: 'missing' }, profiles: {}, source: 'fehlt', sources: {}, problems: [`Hauptprojekt ${wt.project} ist unbekannt`] }
+  }
+  if (!existsSync(wt.path)) {
+    return { ...base, stack: { kind: 'missing' }, profiles: {}, source: 'fehlt', sources: {}, problems: [`Worktree ${wt.path} existiert nicht`] }
+  }
+
+  const stack = detectStack(wt.path)
+  const inferred = inferProfiles(wt.path, stack, { network: false }) ?? {}
+  let devJson = null
+  try {
+    devJson = existsSync(main.path) ? readDevJson(main.path) : null
+  } catch (err) {
+    problems.push(err.message)
+  }
+  problems.push(...(devJson?.warnings ?? []))
+
+  const fromFile = devJson?.profiles?.default
+  // Ein fest eingetragenes 0.0.0.0 hebelte „immer nur lokal“ aus - wenigstens sagen.
+  if (fromFile?.some((spec) => JSON.stringify([spec.cmd, spec.env]).includes(BIND_ALL))) {
+    problems.push(`${basename(devJson.file)} bindet an ${BIND_ALL} - der Worktree wäre im lokalen Netz erreichbar`)
+  }
+  const specs = fromFile ?? inferred.default
+  const source = fromFile ? basename(devJson.file) : inferred.default ? 'abgeleitet' : 'unbekannt'
+  if (!specs) problems.push(diagnose(wt.path, stack))
+
+  // worktree.env gewinnt: genau dafür ist es da - Werte aus der .env des
+  // Hauptprojekts (eigene Adresse, Rückleit-URLs) auf diese Instanz umbiegen.
+  const extraEnv = devJson?.worktree?.env ?? {}
+  const suffix = registry.settings.domainSuffix
+  const resolved = (specs ?? []).map((spec) => {
+    const port = worktreePortFor(wt.slot, spec.role)
+    return {
+      ...spec,
+      env: { ...spec.env, ...extraEnv },
+      port,
+      url: urlForRole(spec.role, hostLabel, 'default', port, suffix),
+      networkUrl: undefined
+    }
+  })
+
+  return {
+    ...base,
+    stack,
+    profiles: resolved.length ? { default: resolved } : {},
+    source,
+    sources: resolved.length ? { default: source } : {},
+    problems,
+    worktreeConfig: devJson?.worktree ?? null
+  }
+}
+
+/** Die registrierten Worktree-Instanzen, sortiert nach Projekt und Name. */
+export function listWorktreeInstances(registry) {
+  return Object.keys(registry.worktrees ?? {})
+    .sort((a, b) => a.localeCompare(b, 'de'))
+    .map((name) => describeWorktree(registry, name))
 }
 
 export function listProjects(registry) {

@@ -1,8 +1,9 @@
+import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { registryFile } from './paths.js'
 import { readJson, writeJson } from './util/json.js'
-import { SLOT_MAX, SLOT_MIN, assertSlot } from './ports.js'
+import { SLOT_MAX, SLOT_MIN, WORKTREE_SLOT_MAX, WORKTREE_SLOT_MIN, assertSlot, slugifyLabel } from './ports.js'
 
 export const DEFAULT_SETTINGS = {
   roots: [join(homedir(), 'Dev')],
@@ -126,7 +127,7 @@ export function applySettingsPatch(registry, patch = {}) {
   return { settings: publicSettings(next), warnings }
 }
 
-const EMPTY = { version: 1, settings: {}, projects: {}, displayNames: {}, retiredSlots: [] }
+const EMPTY = { version: 1, settings: {}, projects: {}, displayNames: {}, retiredSlots: [], worktrees: {} }
 
 function stripLegacyFavorite(entry) {
   if (!entry || typeof entry !== 'object') return entry
@@ -147,23 +148,139 @@ export function load() {
     // Anzeigenamen leben getrennt von der Slot-Vergabe, damit man einen Titel
     // setzen kann, bevor das Projekt aufgenommen ist.
     displayNames: raw.displayNames && typeof raw.displayNames === 'object' ? raw.displayNames : {},
-    retiredSlots: raw.retiredSlots ?? []
+    retiredSlots: raw.retiredSlots ?? [],
+    worktrees: raw.worktrees && typeof raw.worktrees === 'object' ? raw.worktrees : {}
   }
 }
 
-export function save(registry) {
+/**
+ * Worktree-Aufnahmen schreibt nur, wer sie unter Sperre geändert hat
+ * (`{ worktrees: true }`). Alle anderen übernehmen den Stand von der Platte -
+ * sonst löschte „Slot entfernen“ mit seinem Sekunden alten Ladestand einen
+ * Worktree, den ein Agent gerade aufgenommen hat. Unbekannte Schlüssel bleiben
+ * erhalten, damit eine ältere devhub-Version nichts Neueres wegschreibt.
+ */
+export function save(registry, { worktrees = false } = {}) {
   const projects = {}
   for (const [name, entry] of Object.entries(registry.projects ?? {})) {
     projects[name] = stripLegacyFavorite(entry)
   }
+  const onDisk = readJson(registryFile, EMPTY)
   writeJson(registryFile, {
+    ...onDisk,
     version: 1,
     settings: registry.settings,
     projects,
     displayNames: registry.displayNames ?? {},
-    retiredSlots: registry.retiredSlots
+    retiredSlots: registry.retiredSlots,
+    worktrees: worktrees ? (registry.worktrees ?? {}) : (onDisk.worktrees ?? {})
   })
+  if (!worktrees) registry.worktrees = onDisk.worktrees ?? {}
   return registry
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Mehrere Agenten rufen `devhub up .` gleichzeitig auf. Ohne Sperre lesen beide
+ * dieselbe Registry, nehmen denselben freien Platz und der Letzte gewinnt.
+ * Die Sperre ist eine Datei, die exklusiv angelegt wird; eine verwaiste (Prozess
+ * abgestürzt) gilt nach 30 Sekunden als abgelaufen.
+ */
+export async function withLock(fn, { timeoutMs = 10000 } = {}) {
+  const lock = `${registryFile}.lock`
+  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`
+  mkdirSync(dirname(lock), { recursive: true })
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const fd = openSync(lock, 'wx')
+      writeSync(fd, token)
+      closeSync(fd)
+      break
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 30000) {
+          unlinkSync(lock)
+          continue
+        }
+      } catch {
+        continue
+      }
+      if (Date.now() > deadline) throw new Error(`Registry ist gesperrt (${lock}) - läuft gerade ein anderes devhub?`)
+      await sleep(50)
+    }
+  }
+  try {
+    return await fn()
+  } finally {
+    // Nur die eigene Sperre entfernen: galt sie als verwaist, hält sie jetzt ein anderer.
+    try {
+      if (readFileSync(lock, 'utf8') === token) unlinkSync(lock)
+    } catch {
+      /* schon weg */
+    }
+  }
+}
+
+/**
+ * Präfix der Worktree-Adresse aus dem Branch: nur das letzte Segment
+ * (`feat/einladungen` → `einladungen`), ohne das `worktree-`, das Claude Code
+ * voranstellt. Detached HEAD fällt auf den Ordnernamen zurück.
+ */
+export function worktreeLabel({ branch, folder } = {}) {
+  const fromBranch = branch ? branch.split('/').pop().replace(/^worktree-/, '') : ''
+  for (const candidate of [fromBranch, folder, 'worktree']) {
+    const slug = slugifyLabel(candidate).slice(0, 63).replace(/-+$/, '')
+    if (slug) return slug
+  }
+  return 'worktree'
+}
+
+export function worktreeByPath(registry, path) {
+  return Object.entries(registry.worktrees ?? {}).find(([, entry]) => entry.path === path)?.[0] ?? null
+}
+
+/**
+ * Vergibt Namen und Platz für einen Worktree (unter Sperre aufrufen). Die
+ * Adresse bleibt, solange es den Worktree gibt - auch wenn darin später der
+ * Branch wechselt, sonst wanderte die URL unter laufenden Sitzungen.
+ * `isBusy(slot)` lässt Plätze aus, deren Ports ein fremder Prozess hält.
+ */
+export async function allocateWorktree(registry, { project, path, branch, folder }, { isBusy = async () => false } = {}) {
+  registry.worktrees ??= {}
+  const existing = worktreeByPath(registry, path)
+  if (existing) return { name: existing, entry: registry.worktrees[existing], created: false }
+
+  const base = worktreeLabel({ branch, folder })
+  let label = base
+  for (let n = 2; registry.worktrees[`${project}@${label}`]; n++) label = `${base}-${n}`
+
+  const taken = new Set(Object.values(registry.worktrees).map((entry) => entry.slot))
+  let slot
+  for (let candidate = WORKTREE_SLOT_MIN; candidate <= WORKTREE_SLOT_MAX; candidate++) {
+    if (taken.has(candidate)) continue
+    if (await isBusy(candidate)) continue
+    slot = candidate
+    break
+  }
+  if (slot === undefined) {
+    throw new Error(
+      `Alle ${WORKTREE_SLOT_MAX - WORKTREE_SLOT_MIN + 1} Worktree-Plätze sind belegt - "devhub status" räumt verschwundene Worktrees ab, "devhub forget <projekt@worktree>" gibt einen frei`
+    )
+  }
+
+  const name = `${project}@${label}`
+  const entry = { project, path, label, branch: branch ?? null, slot, addedAt: new Date().toISOString() }
+  registry.worktrees[name] = entry
+  return { name, entry, created: true }
+}
+
+export function removeWorktree(registry, name) {
+  if (!registry.worktrees?.[name]) return false
+  delete registry.worktrees[name]
+  return true
 }
 
 export function usedSlots(registry) {

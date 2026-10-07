@@ -25,6 +25,9 @@ export type DevhubView = {
   ownConflicts: number
   /** Konflikte im ganzen Hub. */
   hubConflicts: number
+  /** Die Sitzung liegt in einem Worktree, den devhub noch nicht gestartet hat. */
+  worktreePending?: boolean
+  worktreePath?: string
 }
 
 declare module 'claude-code' {

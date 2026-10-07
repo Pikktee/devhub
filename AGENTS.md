@@ -48,4 +48,9 @@ PID-Dateien der echten Server durcheinander.
 - Kein Reverse-Proxy, keine `/etc/hosts`-Einträge, kein Root-Prozess.
 - Keine Vereinheitlichung fremder Agent-Formate. Der Hub zeigt an, was gilt, und
   schreibt nur zwischen die eigenen Anker.
-- Keine Änderung an fremden Projekten außer über `devhub sync`.
+- Keine Änderung an fremden Projekten außer über `devhub sync`. Einzige Ausnahme:
+  `devhub up <worktree> --daten` kopiert ausdrücklich angeforderte Daten aus dem
+  Hauptprojekt in einen Worktree. Eine konsistente Kopie einer laufenden
+  SQLite-Datenbank (offene WAL) ist fehleranfällig und gehört nicht in jeden
+  Agenten. `.env` und Abhängigkeiten richtet devhub dagegen nicht ein, es nennt
+  nur die Befehle.

@@ -1,9 +1,20 @@
 import { spawn } from 'node:child_process'
-import { resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import * as registryStore from '../registry.js'
 import * as stateStore from '../state.js'
-import { describeProject, listProjects, scanRoots } from '../discovery.js'
-import { down, downAll, instanceStatus, logFileFor, restart, tailLog, up } from '../supervisor.js'
+import { describeProject, listProjects, listWorktreeInstances, scanRoots } from '../discovery.js'
+import {
+  down,
+  downAll,
+  instanceStatus,
+  logFileFor,
+  pruneWorktrees,
+  registerWorktree,
+  restart,
+  tailLog,
+  up
+} from '../supervisor.js'
+import { worktreeInfo } from '../git.js'
 import { agentContext, readAgentFile } from '../agents.js'
 import { linkRuleFiles } from '../adapters/link.js'
 import { syncAll, syncGlobal, syncProject, unsyncProject } from '../sync.js'
@@ -42,16 +53,35 @@ async function projectPayload(registry, project, { withMemory = false } = {}) {
     adopted: project.adopted,
     stack: project.stack,
     source: project.source,
+    sources: project.sources ?? {},
     problems: project.problems,
     github: project.github ?? null,
+    // Worktree-Instanz: zu welchem Projekt sie gehört. Am Hauptprojekt: die
+    // Ordner seiner Worktrees, damit der Mod eine Sitzung darin erkennt, auch
+    // bevor sie gestartet wurde.
+    worktree: project.worktree ?? null,
+    worktrees: project.worktrees ?? [],
     profiles
   }
 }
 
+/** Worktree-Instanzen direkt hinter ihr Projekt - so stehen sie in der Liste darunter. */
+function withWorktrees(projects, worktrees) {
+  const ordered = []
+  for (const project of projects) {
+    ordered.push(project, ...worktrees.filter((w) => w.worktree.of === project.name))
+  }
+  const placed = new Set(ordered)
+  return [...ordered, ...worktrees.filter((w) => !placed.has(w))]
+}
+
 export async function overview({ withMemory = false } = {}) {
+  await pruneWorktrees()
   const registry = registryStore.load()
   const projects = await Promise.all(
-    listProjects(registry).map((project) => projectPayload(registry, project, { withMemory }))
+    withWorktrees(listProjects(registry), listWorktreeInstances(registry)).map((project) =>
+      projectPayload(registry, project, { withMemory })
+    )
   )
 
   const running = projects.flatMap((p) => p.profiles).filter((p) => p.state === 'läuft').length
@@ -74,8 +104,9 @@ export async function overview({ withMemory = false } = {}) {
       roots: registry.settings.roots
     },
     summary: {
-      total: projects.length,
-      adopted: projects.filter((p) => p.adopted).length,
+      total: projects.filter((p) => !p.worktree).length,
+      adopted: projects.filter((p) => p.adopted && !p.worktree).length,
+      worktrees: projects.filter((p) => p.worktree).length,
       running,
       partial,
       memory,
@@ -105,7 +136,20 @@ export const routes = [
   {
     method: 'POST',
     pattern: /^\/api\/projects\/([^/]+)\/up$/,
-    handler: async (_req, [name], _query, body) => up(name, { profile: body.profile ?? 'default' })
+    handler: async (_req, [name], _query, body) => up(name, { profile: body.profile ?? 'default', data: Boolean(body.data) })
+  },
+  {
+    // Ein Worktree, den der Hub noch nicht kennt, hat noch keinen Namen - der Pfad nimmt ihn auf.
+    method: 'POST',
+    pattern: /^\/api\/worktrees\/up$/,
+    handler: async (_req, _params, _query, body) => {
+      // Relativ hieße: relativ zum Arbeitsordner des Hubs - nie gemeint.
+      const info = typeof body.path === 'string' && isAbsolute(body.path) ? worktreeInfo(body.path) : null
+      if (!info?.isWorktree) throw Object.assign(new Error(`${body.path ?? '?'} ist kein Git-Worktree`), { status: 400 })
+      await pruneWorktrees()
+      const name = await registerWorktree(info)
+      return { name, ...(await up(name, { data: Boolean(body.data) })) }
+    }
   },
   {
     method: 'POST',
@@ -159,6 +203,16 @@ export const routes = [
     pattern: /^\/api\/projects\/([^/]+)\/forget$/,
     handler: async (_req, [name], _query, body) => {
       const registry = registryStore.load()
+      if (registry.worktrees[name]) {
+        await down(name)
+        await registryStore.withLock(async () => {
+          const fresh = registryStore.load()
+          registryStore.removeWorktree(fresh, name)
+          registryStore.save(fresh, { worktrees: true })
+        })
+        recordEvent({ type: 'forget', project: name, summary: 'Worktree-Platz freigegeben', lines: [] })
+        return { name, removed: true }
+      }
       const entry = registry.projects[name]
       if (!entry) {
         throw Object.assign(new Error(`${name} ist nicht aufgenommen`), { status: 404 })

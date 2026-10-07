@@ -1,6 +1,6 @@
 # Plan: Worktrees in devhub starten
 
-Stand: 8. Oktober 2026. Noch nicht umgesetzt.
+Stand: 8. Oktober 2026. Umgesetzt; Abweichungen stehen unter „Umsetzung“ am Ende.
 
 ## Anlass
 
@@ -119,7 +119,7 @@ Für journey (eigener Commit dort):
 {
   "worktree": {
     "daten": ["server/daten/maptale.db", "server/daten/luhambo.db", "server/daten/tours", "server/daten/karte", "server/daten/benutzer"],
-    "env": { "MAPTALE_WEB_URL": "{url}", "MAPTALE_BASE_URL": "{url}" }
+    "env": { "MAPTALE_WEB_URL": "{frontendUrl}", "MAPTALE_BASE_URL": "{frontendUrl}" }
   }
 }
 ```
@@ -161,3 +161,20 @@ portless (Vercel Labs) löst Adressen samt Worktree-Präfix bereits, über einen
 Reverse Proxy; es übernimmt aber nicht die Prozesse. Übernommen wird nur die Idee
 (Erkennung ohne Konfiguration, Branch-Name als Präfix), nicht das Werkzeug –
 Proxy und Port 443 widersprechen `AGENTS.md`.
+
+## Umsetzung
+
+- Instanzname `projekt@label`; damit funktionieren `state.json`, Logdateien und die
+  API-Routen ohne eigenen Schlüssel. Registry-Feld `worktrees`.
+- Git wird nicht aufgerufen: `worktreeInfo()`/`listWorktrees()` in `src/git.js` lesen
+  `.git`, `commondir`, `gitdir` und `HEAD` direkt (Übersicht fragt jedes Projekt ab).
+- `{frontendUrl}` statt `{url}` in `worktree.env`: `{url}` ist pro Prozess die eigene
+  Adresse, für die API also die Backend-URL.
+- SQLite-Kopie über `node:sqlite` (`VACUUM INTO`), Fallback `/usr/bin/sqlite3` - im PATH
+  steht sonst gern das alte aus dem Android-SDK.
+- Top-Level-`env` der `devhub.json` entfernt (wurde nie benutzt); steht es noch in einer
+  Datei, erscheint es als unbekannter Schlüssel.
+- Mod: ein noch nicht gestarteter Worktree zeigt „Worktree · devhub up .“ statt der
+  Adressen des Hauptprojekts; `/devhub up` nimmt ihn über `POST /api/worktrees/up` auf.
+- Offen geblieben: `MAPTALE_API` in der Ableitung, verwaister Slot 30 (`smoke`),
+  `devhub link` ohne devhub selbst, `devhub.json` für journey (eigener Commit dort).
