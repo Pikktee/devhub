@@ -1619,7 +1619,9 @@ function rendereDetail() {
   const titel = anzeigeName(projekt)
   const hauptProfil = projekt.profiles[0]
   const metaChips = [
-    projekt.adopted
+    projekt.worktree
+      ? `<span class="marke-typ" title="Ports 52NN / 88NN, wiederverwendbar">Worktree-Platz ${projekt.slot}</span><span class="marke-typ">${h(projekt.worktree.branch ? `Branch ${projekt.worktree.branch}` : 'detached HEAD')} · von ${h(projekt.worktree.of)}</span>`
+      : projekt.adopted
       ? `<span class="marke-typ">Slot ${projekt.slot}${Object.entries(projekt.profileSlots ?? {})
           .map(([p, s]) => ` · ${p} ${s}`)
           .join('')}</span>`

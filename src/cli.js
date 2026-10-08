@@ -786,7 +786,7 @@ const HELP = `devhub - die Dev-Server gehören dem Hub, nicht der Sitzung
   devhub ports                         Slot- und Portvergabe
   devhub list                          alle erkannten Projekte
   devhub adopt <projekt> [--slot N]    Slot vergeben (auch --profil smoke, --titel Name)
-  devhub forget <projekt@worktree>|.  Worktree-Platz freigeben (z. B. journey@einladungen)
+  devhub forget <projekt@worktree>     Worktree-Platz freigeben (z. B. journey@einladungen, im Worktree: .)
   devhub forget <projekt>              aus der Registry nehmen (Slot bleibt gesperrt; lokale Hub-Dateien werden entfernt, --dateien-behalten lässt sie, --deps-loeschen räumt node_modules/.next auf)
   devhub sync [--projekt x] [--global] lokale Agent-Dateien schreiben (--probelauf zeigt nur)
                                        --global trägt den Claude-Code-Mod ein; --ohne-mod --hook nimmt stattdessen den Bash-Hook

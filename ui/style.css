@@ -631,7 +631,7 @@ body::before {
 .zeile {
   display: grid;
   /* Status · Power · Name · Adresse · Zustand · Menü */
-  grid-template-columns: 14px 32px minmax(11rem, 1.6fr) minmax(0, 1fr) 8.75rem 2.25rem;
+  grid-template-columns: 14px 32px minmax(11rem, 1.3fr) minmax(0, 1.3fr) 8.75rem 2.25rem;
   align-items: center;
   column-gap: 12px;
   row-gap: 6px;

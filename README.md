@@ -1,44 +1,31 @@
 # devhub
 
-**Ein lokaler Hub für alle deine Dev-Server - damit Coding-Agenten und du denselben Server treffen.**
+devhub ist ein lokaler Dienst für macOS, dem alle Dev-Server deiner Projekte
+gehören. Jedes Projekt bekommt einen festen Port und eine feste Adresse, etwa
+`http://maptale.localhost:5123`. Gestartet und gestoppt wird nur über devhub,
+egal ob du selbst tippst oder ein Coding-Agent.
 
-Wenn Cursor, Claude Code oder Codex jeweils `npm run dev` starten, entstehen schnell
-zwei Server auf zwei Ports. Logins und Daten „fehlen“, obwohl „alles läuft“.
-devhub gibt jedem Projekt **eine feste Adresse** und einen **Dienst unter launchd**,
-der die Server überlebt - unabhängig von IDE, Agent-Sitzung oder Terminal.
+![Übersicht: laufende und gestoppte Projekte, darunter eingerückt zwei Git-Worktrees von Nordlicht](docs/uebersicht.png)
 
-Übersicht im Browser: [http://devhub.localhost:4000](http://devhub.localhost:4000)
+## Warum
 
-![devhub-Übersicht: laufende und gestoppte Projekte mit festen localhost-Adressen](docs/uebersicht.png)
+Ohne zentrale Stelle startet jeder seinen eigenen Server: du im Terminal, Cursor
+in seiner Sitzung, Claude Code in einem Worktree. Vite weicht auf 5174 aus, Next
+auf 3001, und irgendwann testet jemand gegen den falschen Server. Der Login fehlt,
+die Daten sind andere, und alles sieht aus, als liefe es.
 
----
+devhub hält pro Projekt genau eine Instanz auf genau einer Nummer. Agenten bekommen
+eine Regel, die ihnen das eigene Starten verbietet, und den Befehl, den sie
+stattdessen nehmen sollen. Arbeitet ein Agent in einem Git-Worktree, bekommt der
+Worktree eine eigene Instanz daneben, statt dem Hauptprojekt in die Quere zu kommen.
 
-## Für wen ist das?
+Brauchst du nicht, wenn du an einem einzigen Projekt arbeitest und nie zwei Leute
+oder Agenten gleichzeitig daran sitzen.
 
-- Du arbeitest auf **macOS** mit mehreren lokalen Projekten.
-- Du nutzt **Coding-Agenten** (Cursor, Claude Code, Codex, …), die sonst selbst
-  Dev-Server starten würden.
-- Du willst stabile URLs wie `http://mein-projekt.localhost:5120` statt
-  „diesmal 3000, nächstes Mal 3001“.
+## Installation
 
-**Nicht nötig**, wenn du nur ein Projekt hast und nie parallel Agent + Mensch
-am selben Stack arbeitest.
-
----
-
-## Voraussetzungen
-
-| Was | Anforderung |
-| --- | --- |
-| Betriebssystem | **macOS** (launchd) |
-| Runtime | **Node.js 20+** |
-| Projekte | Ordner unter einer Wurzel (Standard: `~/Dev`) |
-
-Keine npm-Abhängigkeiten: nur die Node-Standardbibliothek.
-
----
-
-## Schnellstart
+Voraussetzungen: macOS, Node.js 20 oder neuer, Projekte in einem gemeinsamen
+Ordner (Standard `~/Dev`). devhub hat keine npm-Abhängigkeiten.
 
 ```bash
 git clone https://github.com/Pikktee/devhub.git
@@ -46,151 +33,149 @@ cd devhub
 node bin/dev.js setup
 ```
 
-`setup` erledigt:
-
-1. Prüft macOS und Node-Version  
-2. Klärt die **Projektwurzel** (siehe unten)  
-3. `npm link` → Befehle `devhub` und `dev` im PATH  
-4. Installiert den **launchd-Dienst** (Hub startet nach Anmeldung von selbst)  
-5. Schreibt globale **Agent-Regeln** (`sync --global`)  
-6. Installiert den **Cursor-Skill** nach `~/.cursor/skills/devhub/`
-
-Danach Projekte aufnehmen und starten:
+`setup` prüft die Umgebung, legt mit `npm link` die Befehle `devhub` und `dev`
+an, installiert den launchd-Dienst (der Hub startet dann bei jeder Anmeldung),
+schreibt die globalen Agent-Regeln und den Cursor-Skill. Gibt es `~/Dev` nicht,
+fragt es nach. Andere Wurzeln gibst du direkt mit:
 
 ```bash
-devhub list
-devhub adopt mein-projekt          # vergibt festen Slot / Port
-devhub sync                        # lokale Agent-Dateien (Ports) im Projekt
-devhub up mein-projekt
-devhub status mein-projekt
+devhub setup --wurzel ~/Code,~/Work
+```
+
+Ohne Terminal (in einem Skript) und ohne `~/Dev` bricht setup ab, statt still
+einen Ordner anzulegen.
+
+**Nach einem `git pull`** einmal `devhub service install`, sonst läuft der Hub
+mit dem alten Code weiter.
+
+## Erste Schritte
+
+```bash
+devhub list                 # was liegt unter der Wurzel, was lässt sich starten?
+devhub adopt journey        # festen Slot vergeben
+devhub up journey           # starten, abgekoppelt von Terminal und Editor
+devhub status journey       # Adressen und Ports
 open http://devhub.localhost:4000
 ```
 
-`dev` ist nur die Kurzform von `devhub` - inhaltlich dasselbe.
+Der Name in Befehlen ist immer der **Ordner** (`journey`). Die Adresse folgt dem
+**Anzeigenamen** des Projekts (`maptale.localhost`). devhub liest ihn aus der
+README, der `package.json` oder der `devhub.json`. Festlegen kannst du ihn beim
+Aufnehmen (`devhub adopt journey --titel Maptale`) oder später in der Oberfläche.
 
-### Projektwurzel wählen
+Statt eines Namens geht auch ein Pfad. `devhub status .` meint das Projekt,
+in dem du gerade stehst. Ohne Argument gilt ebenfalls das aktuelle Verzeichnis.
 
-| Aufruf | Verhalten |
+## Befehle
+
+| Befehl | Was er tut |
 | --- | --- |
-| `devhub setup` | Nutzt `~/Dev`, falls vorhanden. Fehlt der Ordner, fragt ein Dialog: anlegen, anderen Pfad, oder abbrechen. |
-| `devhub setup --wurzel ~/Code` | Diese Wurzel verwenden (ohne Dialog). |
-| `devhub setup --wurzel ~/Code,~/Work` | Mehrere Wurzeln. |
+| `devhub status [projekt]` | Was läuft, unter welcher Adresse, seit wann |
+| `devhub up <projekt>` | Starten. Läuft es schon, passiert nichts |
+| `devhub down <projekt>` | Die ganze Prozessgruppe stoppen, `--alle` stoppt alles |
+| `devhub restart <projekt>` | Stoppen und neu starten |
+| `devhub logs <projekt>` | Ausgabe des Servers, `-f` folgt, `-n 100` mehr Zeilen, `--prozess api` |
+| `devhub open <projekt>` | Frontend im Browser, `--finder` zeigt den Ordner |
+| `devhub list` | Alle Ordner unter den Wurzeln mit erkanntem Stack |
+| `devhub adopt <projekt>` | Slot vergeben. `--profil smoke` für ein zweites Profil |
+| `devhub forget <projekt>` | Aus devhub nehmen. Der Slot bleibt gesperrt |
+| `devhub ports` | Wer welchen Port hat und was davon belegt ist |
+| `devhub doctor` | Doppelte Slots, fremd belegte Ports, Dienst und Hub |
+| `devhub sync` | Lokale Agent-Dateien in die Projekte schreiben, `--global` die Regeln |
+| `devhub agents [projekt]` | Welche Regeln, Skills und Memories ein Agent dort sieht |
+| `devhub link [projekt]` | `AGENTS.md` und `CLAUDE.md` per Symlink verbinden |
+| `devhub service install` | launchd-Dienst (neu) laden, `uninstall` entfernt ihn |
 
-Ohne interaktives Terminal (z. B. Skript) und ohne vorhandenes `~/Dev` bricht
-Setup ab und verlangt `--wurzel` - es wird nichts stillschweigend angelegt.
-
----
-
-## Alltag in 30 Sekunden
-
-```bash
-devhub status                 # was läuft?
-devhub up journey             # starten (idempotent, wenn schon an)
-devhub logs journey           # Log lesen
-devhub down journey           # ganze Prozessgruppe stoppen
-devhub open journey           # Frontend im Browser
-```
-
-Der **CLI-Name** ist der Ordner unter der Wurzel (`journey`).
-Die **URL** folgt dem Anzeigenamen (`http://maptale.localhost:5120`).
-Bei `devhub status <ordner>` stehen Frontend- und Backend-URLs unter Prozesse -
-Backends meist als `http://127.0.0.1:…`.
-
----
-
-## Oberfläche
-
-Die Übersicht unter [http://devhub.localhost:4000](http://devhub.localhost:4000)
-zeigt alle erkannten Projekte, Start/Stopp und feste Adressen.
-
-| Bereich | Route | Inhalt |
-| --- | --- | --- |
-| Übersicht | `/` | Projekte starten/stoppen, öffnen, Logs |
-| Verlauf | `/verlauf` | Letzte Aktionen |
-| Einstellungen | `/einstellungen` | Wurzeln, Hub-Port, Domain, Editor, Agent-Anzeige (einklappbare Abschnitte) |
-
-- **Befehlspalette:** `⌘K` - Navigation, Projekte und Aktionen (auch Theme umschalten).
-- **Hell-/Dunkelmodus:** in den Einstellungen oder über die Palette; Speicherung im Browser (`localStorage`), nicht in der Registry.
-- **Design Tokens:** [`DESIGN.md`](DESIGN.md) und [`ui/styles/tokens.css`](ui/styles/tokens.css) - gemeinsame Farben, Radien, Typo.
-- **Einstellungen speichern:** Formular unten oder `⌘S`. Port-Änderungen brauchen danach `devhub service install`, damit launchd den neuen Hub-Port lädt.
-
----
-
-## Wichtige Kommandos
-
-| Kommando | Wirkung |
-| --- | --- |
-| `devhub setup [--wurzel …]` | Neuen Rechner einrichten |
-| `devhub status [projekt]` | Laufzustand, Ports, URLs |
-| `devhub up <projekt> [--profil p]` | Abgekoppelt starten |
-| `devhub up . [--daten]` | Den Worktree starten, in dem du stehst (siehe [Worktrees](#worktrees)) |
-| `devhub down <projekt>` / `--alle` | Prozessgruppe stoppen |
-| `devhub restart <projekt>` | Stoppen und starten |
-| `devhub logs <projekt> [-f] [-n 40]` | Server-Ausgabe |
-| `devhub ports` | Slot- und Portvergabe anzeigen |
-| `devhub list` | Alle erkannten Projekte |
-| `devhub adopt <projekt>` | Slot vergeben |
-| `devhub forget <projekt>` | Aus der Registry (Slot bleibt gesperrt) |
-| `devhub forget <projekt@worktree>` | Worktree-Platz freigeben |
-| `devhub sync [--global]` | lokale Agent-Dateien / globale Regeln schreiben |
-| `devhub agents [projekt]` | Regeln / Skills / Memory anzeigen |
-| `devhub link [projekt]` | `AGENTS.md` ↔ `CLAUDE.md` verknüpfen |
-| `devhub doctor` | Kollisionen und Ungereimtheiten |
-| `devhub serve [--port …]` | Hub im Vordergrund (ohne launchd) |
-| `devhub service install\|uninstall` | launchd-Dienst (ohne Argument: Status) |
-| `devhub open [projekt]` | Browser (oder `--finder` / `--ordner`) |
-| `devhub reveal <projekt>` | Projektordner im Finder |
-
-Ohne Projektnamen gilt das Verzeichnis, in dem du stehst; statt des Namens geht
-auch ein Pfad (`devhub status .`). `dev` ist Alias für `devhub`.
-
----
+`dev` ist dasselbe wie `devhub`. `devhub help` zeigt alles auf einen Blick.
 
 ## Ports und Adressen
 
-Jedes aufgenommene Projekt bekommt einen **Slot** (10–99). Der Slot wird
-**nie wiederverwendet** - alte Bookmarks zeigen nicht plötzlich auf ein fremdes Projekt.
+Jedes aufgenommene Projekt bekommt einen **Slot** zwischen 10 und 99. Daraus
+ergeben sich beide Ports:
 
-| Rolle | Formel | Beispiel Slot 20 |
+| Rolle | Port | Slot 23 |
 | --- | --- | --- |
-| Frontend | `51NN` | 5120 |
-| Backend | `87NN` | 8720 |
+| Frontend | `51NN` | `http://maptale.localhost:5123` |
+| Backend | `87NN` | `http://127.0.0.1:8723` |
 
-Adresse Frontend: `http://<anzeigename>.localhost:<port>`  
-Zweites Profil (z. B. smoke): `http://<name>-smoke.localhost:<port>`
+Ein Slot wird nie wieder vergeben, auch nicht nach `forget`. Ein altes Lesezeichen
+öffnet sonst irgendwann ein fremdes Projekt mit fremden Cookies.
 
 macOS löst `*.localhost` ohne `/etc/hosts` und ohne Root auf. Der Port bleibt in
-der URL, damit HMR (Vite u. a.) funktioniert. Getrennte Hostnamen bedeuten auch
-getrennte Cookies - zwei Instanzen desselben Projekts überschreiben sich nicht
-mehr die Anmeldung.
+der Adresse, damit Hot Reload funktioniert. Weil jedes Projekt einen eigenen
+Hostnamen hat, hat es auch eigene Cookies: zwei Projekte melden sich nicht mehr
+gegenseitig ab.
 
-### Worktrees
+Backends stehen bewusst unter `127.0.0.1`, nicht unter dem Projektnamen:
+`localhost` zeigt je nach System auf `::1`, und viele APIs hören nur auf IPv4.
+Die richtigen Adressen nennt `devhub status <projekt>` unter „Prozesse“.
 
-Agenten arbeiten oft in Git-Worktrees (`<projekt>/.claude/worktrees/<name>` oder
-irgendwo sonst). `devhub up .` im Worktree startet ihn als eigene Instanz neben
-dem Hauptprojekt:
+Ein zweites Profil (zum Beispiel für Smoke-Tests) bekommt einen eigenen Slot und
+die Adresse `maptale-smoke.localhost`.
+
+## Git-Worktrees
+
+Agenten arbeiten oft in Worktrees, etwa unter `<projekt>/.claude/worktrees/<name>`.
+Der Server des Hauptprojekts zeigt dort den falschen Code. Deshalb startet
+`devhub up .` im Worktree eine **eigene Instanz** daneben:
+
+```
+$ cd ~/Dev/nordlicht/.claude/worktrees/export-gpx
+$ devhub up .
++ nordlicht@export-gpx aufgenommen · Platz 11 · Ports 5211 / 8811
+Fehler: Der Worktree ist noch nicht vorbereitet. devhub richtet ihn nicht selbst ein - einmal ausführen:
+  cd ~/Dev/nordlicht/.claude/worktrees/export-gpx && ln -s ../../../.env .env
+  cd ~/Dev/nordlicht/.claude/worktrees/export-gpx && npm ci
+danach im Worktree erneut: devhub up .
+```
+
+devhub richtet den Worktree nicht ein, es sagt nur, was fehlt. Nach den beiden
+Befehlen:
+
+```
+$ devhub up .
+● nordlicht@export-gpx · api → http://127.0.0.1:8811
+● nordlicht@export-gpx · web → http://export-gpx.nordlicht.localhost:5211
+```
+
+![Detailansicht eines Worktrees: eigener Platz, Branch, Frontend und API mit eigenen Ports](docs/detail.png)
+
+So unterscheidet sich ein Worktree vom Hauptprojekt:
 
 | | Hauptprojekt | Worktree |
 | --- | --- | --- |
-| Name | `journey` | `journey@optionen-runde-2` |
-| Ports | `51NN` / `87NN` | `52NN` / `88NN`, Plätze 10–29 |
-| Adresse | `maptale.localhost:5123` | `optionen-runde-2.maptale.localhost:5210` |
-| Netz | auf Wunsch im LAN | immer nur lokal |
+| Name | `nordlicht` | `nordlicht@export-gpx` |
+| Ports | `51NN` / `87NN` | `52NN` / `88NN` |
+| Adresse | `nordlicht.localhost:5115` | `export-gpx.nordlicht.localhost:5211` |
+| Im lokalen Netz | wenn freigegeben | nie |
+| Daten | die eigenen | leer, oder eine Kopie auf Wunsch |
 
-- Das Präfix der Adresse kommt aus dem **Branch** (letztes Segment, ohne `worktree-`),
-  bei detached HEAD aus dem Ordner. Es bleibt, auch wenn im Worktree später der Branch wechselt.
-- Worktree-Plätze werden **wiederverwendet**: sobald der Worktree verschwindet
-  (`git worktree remove`), räumen `devhub status`, `devhub up` und die Übersicht ihn ab
-  und stoppen seine Prozesse. Ein nicht eingehängtes Volume zählt nicht als verschwunden.
-- devhub **richtet den Worktree nicht ein**. Fehlen `.env` oder `node_modules`, bricht
-  `up` ab und nennt die fertigen Befehle (Symlink auf die `.env` des Hauptprojekts,
-  `npm ci` je Paketordner).
-- Ein Worktree startet mit **leeren Daten**. `devhub up . --daten` kopiert vorher die in
-  `devhub.json` unter `worktree.daten` genannten Pfade aus dem Hauptprojekt - SQLite per
-  `VACUUM INTO` (konsistent, auch während die Hauptinstanz schreibt), Ordner als APFS-Klon.
-  Erneut aufgerufen setzt es die Daten zurück; eine laufende Instanz wird dafür gestoppt.
-- `devhub.json` gilt immer die des **Hauptprojekts**. `worktree.env` überschreibt
-  Werte aus der `.env`, die auf die Hauptinstanz zeigen:
+- **Der Name kommt aus dem Branch**, genauer aus dessen letztem Teil:
+  `feat/export-gpx` wird zu `export-gpx`, das `worktree-`, das Claude Code
+  voranstellt, fällt weg. Ohne Branch (detached HEAD) zählt der Ordnername.
+  Einmal vergeben, bleibt die Adresse, auch wenn im Worktree später der Branch
+  wechselt.
+- **Im Worktree heißt der Name immer `.`**: `devhub status .`, `devhub logs .`,
+  `devhub down .`. Wer dort `devhub up nordlicht` tippt, startet das Hauptprojekt;
+  devhub warnt dann.
+- **Es gibt 20 Worktree-Plätze**, und anders als Slots werden sie wiederverwendet.
+  Verschwindet ein Worktree (`git worktree remove`), stoppen `devhub status`,
+  `devhub up` und die Übersicht seine Prozesse und geben den Platz frei. Ein
+  Worktree auf einem gerade nicht eingehängten Volume zählt nicht als verschwunden.
+  Von Hand freigeben: `devhub forget nordlicht@export-gpx`.
+- **Die `.env` wird per Symlink geteilt.** Werte, die im Worktree anders sein
+  müssen, etwa eine Datenbank-URL oder die eigene Adresse, gehören in die
+  `devhub.json` des Hauptprojekts (siehe unten).
+- **Worktrees, die git kennt, die aber noch nie gestartet wurden,** stehen in der
+  Übersicht grau unter „Gestoppt“. Ihr Start-Knopf macht dasselbe wie `devhub up .`.
+- **Compose-Projekte** lassen sich noch nicht als Worktree starten. Ihre festen
+  Ports in der Compose-Datei kollidierten mit dem Hauptprojekt.
+
+### Daten aus dem Hauptprojekt
+
+Ein Worktree startet mit leeren Daten. Brauchst du echte Daten (Konten, Inhalte),
+kopiert `devhub up . --daten` sie vorher aus dem Hauptprojekt. Was kopiert wird,
+steht in der `devhub.json` des **Hauptprojekts**:
 
 ```json
 {
@@ -201,331 +186,221 @@ dem Hauptprojekt:
 }
 ```
 
-Compose-Projekte lassen sich (noch) nicht als Worktree starten: feste Ports in der
-Compose-Datei kollidierten mit dem Hauptprojekt.
+SQLite-Datenbanken kopiert devhub per `VACUUM INTO`. Die Kopie ist vollständig,
+auch wenn die Hauptinstanz gerade schreibt. Ordner werden als APFS-Klon angelegt
+und kosten deshalb kaum Platz. Ein zweites `--daten` setzt den Worktree auf den
+aktuellen Stand zurück; läuft er, wird er dafür gestoppt.
 
-### Im lokalen Netzwerk (Handy, Tablet, zweiter Rechner)
+Das ist die einzige Stelle, an der devhub in ein Projekt schreibt. Zeigt ein
+Ordner im Worktree per Symlink ins Hauptprojekt, verweigert devhub die Kopie,
+statt dort etwas zu überschreiben.
 
-`*.localhost` gilt nur auf diesem Rechner - Browser lösen die Endung fest auf
-Loopback auf, ein anderes Gerät erreicht diese Namen nie. Für den Blick vom Handy
-gibt es in den Einstellungen unter **Hub & Netzwerk** den Schalter
-**Im Netzwerk freigeben** (`networkAccess`). Er ändert zweierlei:
+`worktree.env` überschreibt Werte aus der geteilten `.env`. `{frontendUrl}` ist
+die Adresse des Worktree-Frontends, weitere Platzhalter stehen unter
+[Projekte einrichten](#projekte-einrichten).
 
-- Abgeleitete Startkommandos binden auf alle Interfaces (`--host 0.0.0.0`, bei
-  Next `--hostname`, sonst `HOST`). Ohne das lauscht Vite nur auf Loopback.
-- Jeder Prozess bekommt eine zweite Adresse `http://<adresse>:<port>`, und das
-  Frontend bekommt seine API unter derselben Adresse statt unter `127.0.0.1` -
-  im fremden Browser wäre Loopback sonst das Gerät des Betrachters.
+## Die Oberfläche
 
-Die Adresse wird gemessen (die IPv4 dieses Rechners), nicht gespeichert. Wer
-lieber einen Namen sieht, trägt ihn unter **Adresse im Netz** ein
-(`networkHost`), z. B. den Bonjour-Namen `<rechner>.local`. **Achtung:** Vite
-lässt ungefragt nur IP-Adressen und `localhost` durch; für einen Namen braucht
-das Projekt `server.allowedHosts`, Next entsprechend `allowedDevOrigins`.
+[http://devhub.localhost:4000](http://devhub.localhost:4000) zeigt alle Projekte
+unter den Wurzeln: laufende oben, gestoppte darunter, Ordner ohne Startkommando
+eingeklappt am Ende. Worktrees stehen eingerückt unter ihrem Projekt.
 
-Eigene Startkommandos in `devhub.json` rührt der Hub nicht an - dort setzt man
-die Bindung selbst über den Platzhalter `{bindHost}`. Ob es geklappt hat, wird
-gemessen: `devhub up` und die Übersicht zeigen „nur lokal“, wenn der Port auf der
-Netzadresse nicht antwortet, und `devhub doctor` listet solche Prozesse auf.
+- Starten und Stoppen über den Knopf links, alles Weitere im Menü `⋯`.
+- Ein Klick auf den Namen öffnet die Detailansicht: Prozesse, Logs, Startkonfiguration
+  und der Agent-Kontext, also welche Regeln, Skills und Memories ein Agent in
+  diesem Projekt sieht.
+- `⌘K` öffnet die Befehlspalette für Projekte und Aktionen.
+- **Verlauf** zeigt, was der Hub getan hat. Unter **Einstellungen** stehen Wurzeln,
+  Hub-Port, Editor und die Freigabe fürs lokale Netz. Hell und dunkel merkt sich
+  der Browser.
 
-**Der Hub selbst bleibt lokal.** Er zeigt Regeln, Skills und Sitzungsspeicher und
-lauscht weiterhin nur auf `127.0.0.1`; der Schalter ändert daran nichts.
-
----
+Ein geänderter Hub-Port gilt erst nach `devhub service install`.
 
 ## Coding-Agenten
 
-Agents sollen **keine** eigenen Dev-Server starten (`npm run dev`, `vite`,
-`next dev`, `uvicorn`, …). Stattdessen: `devhub status` / `devhub up` / `devhub down`.
+Agenten sollen keine Dev-Server starten, sondern devhub benutzen. Dafür sorgen
+drei Dinge.
 
-### Was `devhub sync` schreibt
+**Globale Regel.** `devhub sync --global` schreibt einen Abschnitt nach
+`~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc` und `~/.codex/AGENTS.md`:
+welche Befehle verboten sind, welche stattdessen gelten, und dass im Worktree
+`.` statt des Ordnernamens steht. devhub schreibt nur zwischen seine eigenen
+Markierungen, der Rest der Dateien bleibt unberührt.
 
-Nur **lokale** Dateien im Projekt (nicht fürs Repo gedacht) plus einen
-gitignore-Marker. Die allgemeine „keine eigenen Dev-Server“-Regel liegt
-global auf der Maschine (`sync --global`), nicht in jedem Projekt-Repo.
+**Lokale Dateien pro Projekt.** `devhub sync` legt in jedem aufgenommenen Projekt
+eine Cursor-Regel mit den Ports dieses Rechners und eine `.claude/launch.json` an,
+die sich nur an laufende Server hängt und nichts selbst startet. Beide sind per
+Markierung in der `.gitignore` ausgenommen und landen nicht im Repo.
 
-| Datei | Ins Git? | Inhalt |
-| --- | --- | --- |
-| `.cursor/rules/devhub.local.mdc` | nein | Ports dieser Maschine |
-| `.claude/launch.json` | nein | Nur Attach-URLs, keine Startkommandos |
-| `.gitignore` (Marker `# >>> devhub`) | ja | Lokale Hub-Dateien ausnehmen |
-
-`devhub sync --global` schreibt die allgemeine Regel nach
-`~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc` und `~/.codex/AGENTS.md`.
-
-Außerdem trägt `sync --global` (und damit auch `setup`) den **Claude-Code-Mod**
-ein, siehe unten. Wer statt des Mods den alten Bash-Hook will:
-`devhub sync --global --ohne-mod --hook`. Beides zusammen gibt es nicht; mit Mod
-wird ein vorhandener Hook entfernt.
-
-### Claude-Code-Mod
-
-Unter [`claude-mod/`](claude-mod/) liegt ein Plugin für Claude Code (Terminal und
-Code-Tab der Desktop-App), das projektübergreifend wirkt. Es fragt die Hub-API auf
-`127.0.0.1:<hubPort>` (aus `registry.json`, Standard 4000) alle fünf Sekunden ab
-und ordnet die Sitzung über ihr Arbeitsverzeichnis einem Projekt zu (der engste
-Projektpfad gewinnt).
+**Claude-Code-Mod.** Der Ordner [`claude-mod/`](claude-mod/) ist ein Plugin für
+Claude Code (Terminal und Code-Tab der Desktop-App). `setup` und `sync --global`
+tragen ihn in `~/.claude/settings.json` ein. Er fragt alle fünf Sekunden den Hub
+und ordnet die Sitzung über ihr Arbeitsverzeichnis einem Projekt oder Worktree zu.
 
 | Was | Wirkung |
 | --- | --- |
-| Statuszeile | `devhub ● läuft · Maptale · http://maptale.localhost:5123`, bei `aus` der Startbefehl, bei fremd belegten Ports ein ⚠. Nur für aufgenommene Projekte. |
-| Band über dem Prompt | Knöpfe zu Frontend und API, solange das Projekt läuft. |
-| Kontext fürs Modell | Ein Block `devhub` mit den echten Adressen dieses Projekts. Ohne Laufzustand, damit er sich nur ändert, wenn sich Adressen ändern. |
-| Bash-Sperre | Dev-Server-Starts (dieselben Muster wie der Hook, [`dev-server-patterns.js`](claude-mod/hooks/dev-server-patterns.js)) werden abgelehnt; die Antwort nennt `devhub up <projekt>` und den aktuellen Zustand. |
-| Port-Warnung | Ein `localhost`-Port im Befehl, der nicht zu diesem Projekt gehört, bekommt einen Hinweis fürs Modell (wem er gehört, welche Adressen richtig sind). Kein Verbot. |
-| Tool `mcp__devhub__logs` | Letzte Fehlerzeilen aller Prozesse des Projekts (pino-JSON ab Level 50 eingeschlossen). |
-| `/devhub` | `up`, `down`, `restart`, `status`, `logs`, `open`, optional mit Projektname; `/devhub open hub` öffnet die Übersicht. |
+| Statuszeile | `devhub ● läuft · Maptale · http://maptale.localhost:5123`, sonst der Startbefehl |
+| Kontext fürs Modell | Die echten Adressen des Projekts, im Worktree der Hinweis auf `devhub up .` |
+| Startsperre | `npm run dev`, `vite`, `next dev` und Verwandte werden abgelehnt, mit dem richtigen Befehl als Antwort |
+| Port-Hinweis | Ein Befehl mit einem fremden `localhost`-Port bekommt einen Hinweis, wem der Port gehört |
+| `/devhub` | `up`, `down`, `restart`, `status`, `logs`, `open` direkt aus der Sitzung |
+| Tool `mcp__devhub__logs` | Die letzten Fehlerzeilen aller Prozesse |
 
-**Ist kein Hub erreichbar, bleibt der Mod stumm:** keine Statuszeile, kein
-Kontextblock, keine Sperre, kein Tool. Nur `/devhub` antwortet dann mit einem
-Hinweis.
+Antwortet kein Hub, bleibt der Mod stumm und sperrt nichts. Wer statt des Mods
+den älteren Bash-Hook möchte: `devhub sync --global --ohne-mod --hook`.
 
-Eingebunden wird der Ordner über `env.CLAUDE_CODE_PLUGIN_DIRS` in
-`~/.claude/settings.json`; Claude Code lädt ihn direkt aus dem Repo und lädt neu,
-wenn sich eine Datei ändert. Einzeln ausprobieren geht auch ohne Eintrag:
+Für Cursor installiert `setup` einen Skill nach `~/.cursor/skills/devhub/`
+(Vorlage: [`skill/cursor/SKILL.md`](skill/cursor/SKILL.md)).
 
-```bash
-claude --plugin-dir ~/Dev/devhub/claude-mod
-```
+## Projekte einrichten
 
-Zwei Abweichungen vom Naheliegenden, beide von der Plugin-API erzwungen:
+Die meisten Projekte brauchen nichts. devhub findet das `dev`- oder `start`-Skript
+in der `package.json`, auch in Unterordnern wie `web/` oder `app/`, und übergibt den
+Port mit `--port` beziehungsweise `PORT`. Eine API unter `server/` wird als zweiter
+Prozess erkannt, ebenso Python mit `app.py`, `main.py` oder `server.py` und ein
+vorhandenes `.venv`.
 
-- **Knöpfe statt Links im Band.** Das Link-Element nimmt nur `https:` und
-  `http://localhost`. Die Adresse auf `localhost` umzuschreiben hieße anderer Host,
-  andere Cookies, also öffnet ein Knopf genau die vergebene Adresse per `open`.
-- **Kontextblock statt Systemprompt-Abschnitt.** `prompt.compose` ist in der
-  aktuellen Claude-Code-Version noch nicht freigeschaltet; `prompt.context` legt
-  den Block in die erste Nachricht der Unterhaltung.
-
-Prüfen (läuft in der Testumgebung von Claude Code gegen eine nachgestellte Hub-API):
-
-```bash
-claude plugin validate claude-mod && claude plugin test claude-mod
-```
-
-### Cursor-Skill
-
-Nach `setup` liegt der Skill unter `~/.cursor/skills/devhub/`. Vorlage im Repo:
-[`skill/cursor/SKILL.md`](skill/cursor/SKILL.md).
-
----
-
-## Projekte konfigurieren
-
-**Viele Node-Projekte brauchen nichts Extra.** Der Hub liest `package.json`,
-findet das Dev-Skript und übergibt Port über `--port` / `PORT`. Auch Unterordner
-wie `web/`, `app/`, `landing/` werden erkannt. Frontend+API (z. B. `server/` oder
-Python unter `web/` + `uv`) können abgeleitet werden.
-
-Wenn der Hub „kein Server“ meldet, oft korrekt (Notizen, Native-Apps, Sammelordner).
-Unterordner einzeln aufnehmen: `devhub adopt monorepo/app`.
-
-### Optional: `devhub.json`
-
-Wenn die Ableitung nicht passt (Compose, uvicorn-Modulpfad, Sonderfälle). Abgeleitete
-Profile bleiben die Grundlage: ein Profil in der Datei ersetzt nur das gleichnamige.
-Eine Datei ohne `profiles` ist gültig und ergänzt nur (`displayName`, `worktree`).
-Unbekannte Schlüssel erscheinen als Hinweis.
+Passt die Ableitung nicht, etwa bei Docker Compose oder uvicorn, legst du eine
+`devhub.json` ins Projekt:
 
 ```json
 {
   "profiles": {
     "default": [
-      {
-        "name": "web",
-        "role": "frontend",
-        "cmd": ["npm", "run", "dev", "--", "--port", "{port}", "--strictPort"]
-      },
-      {
-        "name": "api",
-        "role": "backend",
-        "cwd": "server",
-        "env": { "PORT": "{port}" },
-        "cmd": ["npm", "run", "dev"]
-      }
+      { "name": "web", "role": "frontend", "cmd": ["npm", "run", "dev", "--", "--port", "{port}", "--strictPort"] },
+      { "name": "api", "role": "backend", "cwd": "server", "env": { "PORT": "{port}" }, "cmd": ["npm", "run", "dev"] }
     ]
   }
 }
 ```
 
-Platzhalter: `{port}`, `{host}`, `{bindHost}`, `{url}`, `{frontendUrl}`, `{backendUrl}`, `{project}`, `{profile}`, `{path}`  
-(deutsche Schlüsselnamen werden ebenso akzeptiert.)
+Ein Profil aus der Datei ersetzt nur das gleichnamige abgeleitete. Trägst du nur
+ein Profil `smoke` ein, bleibt `default` abgeleitet. Eine Datei ganz ohne
+`profiles` ist erlaubt und ergänzt nur, zum Beispiel `displayName` oder den
+Abschnitt `worktree`. Schlüssel, die devhub nicht kennt, meldet `devhub list` als
+Hinweis, damit ein Tippfehler auffällt.
 
-Python mit `app.py` / `main.py` / `server.py` (Flask o. Ä., `PORT` aus der Umgebung)
-wird ohne `devhub.json` abgeleitet - bei vorhandenem `.venv` mit dessen Interpreter.
-Für Modulstarts wie uvicorn braucht es weiter eine Datei:
+Platzhalter in `cmd` und `env`: `{port}`, `{url}`, `{frontendUrl}`,
+`{backendUrl}`, `{host}`, `{bindHost}`, `{project}`, `{profile}`, `{path}`.
 
-```json
-{
-  "profiles": {
-    "default": [
-      {
-        "name": "api",
-        "role": "backend",
-        "cmd": [".venv/bin/uvicorn", "app:app", "--port", "{port}"]
-      }
-    ]
-  }
-}
-```
+Next.js kann nicht auf einem festen Port bestehen und weicht still aus, wenn er
+belegt ist. devhub merkt das nach dem Start, stoppt den Server wieder und meldet
+es, statt einen zweiten Server auf einer fremden Nummer laufen zu lassen.
 
----
+## Im lokalen Netz
 
-## Was der Hub durchsetzt
+`*.localhost` funktioniert nur auf diesem Rechner. Um ein Projekt vom Handy aus
+anzusehen, schaltest du in den Einstellungen unter **Hub & Netzwerk** die
+Freigabe ein. Dann
 
-- Server starten **abgekoppelt** (eigene Prozessgruppe) - überleben Shell und IDE.
-- Stoppen der **ganzen Gruppe**, nicht nur eines PIDs.
-- Status aus **Port-Probe**, nicht aus einer PID-Datei.
-- Port muss vor dem Start frei sein; weicht der Server aus (Next.js), stoppt der Hub und meldet es.
-- `devhub up` auf etwas Laufendem ist ein No-op.
+- binden abgeleitete Startkommandos an alle Interfaces (`--host 0.0.0.0`, bei
+  Next `--hostname`),
+- bekommt jeder Prozess eine zweite Adresse `http://<ip>:<port>`,
+- bekommt das Frontend seine API unter derselben IP statt unter `127.0.0.1`.
 
----
+Die IP wird bei jedem Abruf gemessen, nicht gespeichert. Statt der IP kannst du
+einen Namen eintragen, etwa `<rechner>.local`; Vite lässt Namen aber erst durch,
+wenn das Projekt sie unter `server.allowedHosts` erlaubt (Next:
+`allowedDevOrigins`). Eigene Startkommandos in `devhub.json` binden über
+`{bindHost}`. Ob es geklappt hat, zeigen `devhub up` und `devhub doctor`.
+
+Der Hub selbst und alle Worktrees bleiben auf diesem Rechner.
+
+## Was devhub zusichert
+
+- Server laufen in einer eigenen Prozessgruppe und überleben Terminal, Editor und
+  Agenten-Sitzung. Gestoppt wird immer die ganze Gruppe.
+- Ob etwas läuft, entscheidet eine Verbindung auf den Port, nicht eine PID-Datei.
+- Eine vermerkte Gruppe wird nur beendet, wenn Startzeit oder Port belegen, dass
+  sie noch devhub gehört. Nach einem Neustart des Rechners kann dieselbe PID eine
+  ganz andere Shell sein.
+- Ist der Port vor dem Start belegt, startet devhub nichts und nennt den Prozess,
+  der ihn hält.
+- Der Hub lauscht nur auf `127.0.0.1`. Schreibende Anfragen aus dem Browser nimmt
+  er nur von seiner eigenen Oberfläche an, nicht von Dev-Servern unter
+  `*.localhost`.
 
 ## Dateien auf dem Rechner
 
 | Was | Wo |
 | --- | --- |
-| Registry (Slots, Anzeigenamen, Einstellungen) | `~/.config/devhub/registry.json` |
+| Registry: Slots, Worktrees, Anzeigenamen, Einstellungen | `~/.config/devhub/registry.json` |
 | Laufzustand | `~/.local/state/devhub/state.json` |
 | Logs | `~/.local/state/devhub/logs/` |
 | launchd | `~/Library/LaunchAgents/dev.local.devhub.plist` |
-| Claude-Code-Mod | Eintrag in `env.CLAUDE_CODE_PLUGIN_DIRS` von `~/.claude/settings.json` |
+| Claude-Code-Mod | `env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` |
 
-In `registry.json` unter `settings` u. a.:
+Einstellungen in der Registry, die meisten auch in der Oberfläche:
 
 | Schlüssel | Bedeutung | Standard |
 | --- | --- | --- |
-| `roots` | Projekt-Wurzelverzeichnisse | `~/Dev` (absolut) |
-| `hubPort` | Port der Hub-Oberfläche | `4000` |
-| `domainSuffix` | Domain für Projekt-URLs | `localhost` |
-| `networkAccess` | Dev-Server im lokalen Netz erreichbar | `false` |
-| `networkHost` | Name statt gemessener IP für Netz-URLs | leer (gemessen) |
-| `editor` | Kommando für „Im Editor öffnen“ | `cursor` |
-| `readyTimeoutMs` | Wartezeit auf Server-Port | `60000` |
-| `showGlobalAgentContext` | Globale Agent-Dateien in der UI | `true` |
+| `roots` | Projekt-Wurzeln | `~/Dev` |
+| `hubPort` | Port der Oberfläche | `4000` |
+| `domainSuffix` | Endung der Adressen | `localhost` |
+| `networkAccess` | Dev-Server im lokalen Netz | `false` |
+| `networkHost` | Name statt gemessener IP | leer |
+| `editor` | Befehl für „Im Editor öffnen“ | `cursor` |
+| `readyTimeoutMs` | Wie lange ein Start auf den Port wartet | `60000` |
+| `showGlobalAgentContext` | Globale Agent-Dateien in der Detailansicht | `true` |
 
-Diese Pfade gehören **nicht** ins Git deiner Anwendungsprojekte. Das Theme der
-Oberfläche liegt nur im Browser, nicht in der Registry.
+## Wenn etwas nicht klappt
 
----
+**Der Hub antwortet nicht.** `devhub service status` zeigt, ob launchd ihn kennt,
+`devhub service install` lädt ihn neu, `devhub doctor` sucht nach Ursachen.
 
-## Wieder entfernen
+**Ein Server wird nicht bereit.** `devhub logs <projekt>` zeigt die letzten Zeilen.
+Häufig fehlen Abhängigkeiten, oder das Startskript ignoriert `--port`. Dann hilft
+eine `devhub.json` mit festem Kommando.
+
+**„Port ist belegt von …“** Ein Server läuft, den devhub nicht gestartet hat. Den
+Prozess beenden (die Meldung nennt die PID) und erneut `devhub up`.
+
+**Projekt erscheint nicht.** Es liegt in keiner Wurzel, oder devhub erkennt kein
+Startkommando. `devhub list` nennt den Grund. Sammelordner mit mehreren
+Unterprojekten nimmst du einzeln auf: `devhub adopt sammlung/app`.
+
+**`npm link` scheitert ohne Admin-Rechte.** Dann `node ~/Dev/devhub/bin/dev.js …`
+oder ein Shell-Alias.
+
+**Linux, Windows?** Noch nicht. Der Dauerbetrieb hängt an launchd.
+
+## Entfernen
 
 ```bash
 devhub down --alle
 devhub service uninstall
-npm unlink -g devhub          # falls per setup / npm link installiert
-# ggf. auch: npm unlink -g dev
+npm unlink -g devhub
 ```
 
-Optional aufräumen:
+Danach bei Bedarf:
 
-| Was | Pfad / Aktion |
-| --- | --- |
-| Cursor-Skill | `rm -rf ~/.cursor/skills/devhub` |
-| Globale Agent-Regeln | Block zwischen den `devhub`-Ankern in `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc`, `~/.codex/AGENTS.md` (oder die Dateien löschen, falls sie nur Hub-Inhalt hatten) |
-| Claude-Code-Mod | `devhub sync --global --ohne-mod` trägt ihn aus `~/.claude/settings.json` aus |
-| Registry & State | `rm -rf ~/.config/devhub ~/.local/state/devhub` |
-| Projekt-Verträge | Lokale `.cursor/rules/devhub.local.mdc` / `.claude/launch.json` - oder pro Projekt `devhub forget <ordner>` (entfernt Hub-Dateien, behält den Slot gesperrt). Alte `AGENTS.md`-Blöcke von früheren Syncs räumt Forget ebenfalls auf. |
+- `rm -rf ~/.config/devhub ~/.local/state/devhub` für Registry, Zustand und Logs,
+- `rm -rf ~/.cursor/skills/devhub` für den Cursor-Skill,
+- den devhub-Abschnitt aus `~/.claude/CLAUDE.md`, `~/.cursor/rules/devhub.mdc` und
+  `~/.codex/AGENTS.md` löschen,
+- `devhub sync --global --ohne-mod` vorher ausführen, um den Mod aus den
+  Claude-Code-Einstellungen zu nehmen,
+- pro Projekt `devhub forget <ordner>`, um die lokalen Agent-Dateien zu entfernen.
 
-Das geklonte Repo-Verzeichnis kannst du danach einfach löschen. Ohne `service uninstall` würde launchd den Hub nach dem Löschen des Ordners weiter starten wollen und scheitern.
+Ohne `service uninstall` versucht launchd den Hub weiter zu starten, auch wenn der
+Ordner schon gelöscht ist.
 
----
-
-## Entwickeln am Hub selbst
+## Am Hub entwickeln
 
 ```bash
-npm test
-npm run serve:dev    # Hub auf Port 4001, eigenes Zustandsverzeichnis
+npm test                              # Kern, Worktrees, Sicherheit
+claude plugin test claude-mod         # Mod, gegen eine nachgestellte Hub-API
+npm run serve:dev                     # zweite Oberfläche auf Port 4001
 ```
 
-Nicht die produktive Instanz auf 4000 zum Experimentieren nutzen - sonst
-verwirren sich PID-Dateien der echten Projekt-Server.
+Die Tests legen Registry und Zustand in temporäre Ordner und fassen weder deine
+Registry noch deine Projekte an. Die Instanz auf 4000 bitte nicht zum Ausprobieren
+benutzen: sie verwaltet die echten Server. Hinweise für Agenten in diesem Repo
+stehen in [AGENTS.md](AGENTS.md), Farben und Typografie der Oberfläche in
+[DESIGN.md](DESIGN.md).
 
-Hintergrund und Designentscheidungen stecken in den Modulen unter `src/`
-sowie in [AGENTS.md](AGENTS.md) (Hinweise für Agents in diesem Repo).
-
----
-
-## FAQ
-
-### Wie deinstalliere ich devhub wieder?
-
-Siehe [Wieder entfernen](#wieder-entfernen): zuerst Server und launchd stoppen,
-dann optional Link, Skill, Regeln und Zustandsordner löschen.
-
-### Warum nicht einfach immer `npm run dev`?
-
-Weil der nächste Agent (oder du in einem zweiten Terminal) dasselbe nochmal
-startet. Ohne festen Port weichen Vite/Next oft aus - dann reden Frontend und
-Mensch von verschiedenen Welten. Der Hub hält **eine** Instanz auf **einer** Nummer.
-
-### Schreibt sync noch in meine AGENTS.md?
-
-Nein. Sync schreibt nur lokale, gitignorierte Dateien plus den gitignore-Marker.
-Einen älteren Hub-Block in `AGENTS.md` entfernt `devhub forget` bzw. unsync.
-
-### Funktioniert das unter Linux oder Windows?
-
-Derzeit **nein**. Der Dauerbetrieb hängt an **launchd** (macOS). Beiträge für
-systemd o. Ä. wären willkommen, sind aber noch nicht gebaut.
-
-### Muss jedes Projekt `devhub.json` haben?
-
-Nein. Node mit üblichem Dev-Skript und einfaches Python (`app.py`/`main.py` mit
-`PORT`) meist automatisch. `devhub.json` für Compose, uvicorn-Modulpfade und
-Sonderfälle. (Ältere `dev.json` wird noch gelesen.)
-
-### Kann ich die Registry / Ports von einem Mac auf den anderen kopieren?
-
-Technisch die `registry.json` - sinnvoller ist oft ein frisches `adopt` auf dem
-neuen Rechner. Slots sind lokal; URLs können abweichen. `setup` legt ohnehin
-eine eigene Registry an.
-
-### Der Hub antwortet nicht auf Port 4000
-
-```bash
-devhub service status
-devhub doctor
-devhub service install    # erneut laden
-```
-
-Nach einem Update des Repos oft einmal `service install`, damit launchd die
-aktuelle `bin/dev.js` nutzt.
-
-### Ich hatte früher `net.henrikheil.devhub`
-
-Der Dienst heißt jetzt `dev.local.devhub`. Alte plist entfernen und neu
-installieren:
-
-```bash
-launchctl bootout gui/$(id -u)/net.henrikheil.devhub 2>/dev/null
-rm -f ~/Library/LaunchAgents/net.henrikheil.devhub.plist
-devhub service install
-```
-
-### Sind Secrets im Hub sicher?
-
-Der Hub lauscht nur auf **127.0.0.1**. Die Agent-Vorschau liefert nur zuvor
-erkannte Kontextdateien, keinen freien Dateizugriff. Trotzdem: keine Secrets in
-Dateien legen, die du Agenten ohnehin nicht zeigen willst.
-
-### `npm link` ohne Admin-Rechte?
-
-Dann ohne Link arbeiten: `node /pfad/zu/devhub/bin/dev.js …` - oder ein Alias in
-der Shell setzen. `setup` meldet, wenn `npm link` scheitert.
-
----
-
-## Mitwirken
-
-Issues und Pull Requests sind willkommen. Bitte:
-
-- `npm test` grün halten  
-- keine Runtime-npm-Abhängigkeiten hinzufügen  
-- CLI- und UI-Texte auf **Deutsch**, Bezeichner im Code auf **Englisch**
-
----
+Beiträge sind willkommen. Bedingungen: Tests grün, keine Laufzeit-Abhängigkeiten,
+Texte für Menschen auf Deutsch, Bezeichner im Code auf Englisch.
 
 ## Lizenz
 
