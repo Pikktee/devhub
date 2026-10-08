@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
 import { claudeHome, codexHome, cursorHome, home } from './paths.js'
 import { inspectLink } from './adapters/link.js'
@@ -160,6 +160,24 @@ export function readAgentFile(projectPath, requested, { includeGlobal = true } =
     return entry.directory && target.startsWith(`${entry.path}/`)
   })
   if (!permitted) throw new Error('Diese Datei gehört nicht zum Agent-Kontext dieses Projekts')
+  // Der Text des Pfads reicht nicht: ein eingecheckter Symlink (.claude/skills -> ~)
+  // führte sonst zu beliebigen Dateien. Der echte Pfad muss im echten Eintrag liegen.
+  // Einträge aus dem Repo (womöglich aus einem fremden Branch) müssen auch echt im
+  // Projekt liegen; globale (~/.claude) dürfen verlinkt sein - die gehören dem Nutzer.
+  const real = realpathSync(target)
+  const projectReal = realpathSync(projectPath)
+  const repoPaths = new Set(context.repo.map((entry) => entry.path))
+  const permittedReal = allowedRoots.some((entry) => {
+    let root
+    try {
+      root = realpathSync(entry.path)
+    } catch {
+      return false
+    }
+    if (repoPaths.has(entry.path) && root !== projectReal && !root.startsWith(`${projectReal}/`)) return false
+    return real === root || (entry.directory && real.startsWith(`${root}/`))
+  })
+  if (!permittedReal) throw new Error('Diese Datei zeigt aus dem Agent-Kontext hinaus')
 
   const info = statSync(target)
   if (info.isDirectory()) {
@@ -174,7 +192,13 @@ export function readAgentFile(projectPath, requested, { includeGlobal = true } =
     }
   }
   const truncated = info.size > MAX_PREVIEW_BYTES
-  const buffer = readFileSync(target)
+  const buffer = Buffer.alloc(Math.min(info.size, MAX_PREVIEW_BYTES))
+  const fd = openSync(target, 'r')
+  try {
+    readSync(fd, buffer, 0, buffer.length, 0)
+  } finally {
+    closeSync(fd)
+  }
   return {
     path: target,
     name: basename(target),

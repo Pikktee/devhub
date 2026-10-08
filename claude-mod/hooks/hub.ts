@@ -168,6 +168,14 @@ export function statusText(view: DevhubView): string | undefined {
  * Prompt-Cache ab hier.
  */
 export function composeText(view: DevhubView): string | undefined {
+  if (view.worktreePending) {
+    return [
+      '# devhub: Git-Worktree ohne eigenen Server',
+      '',
+      `Diese Sitzung arbeitet in einem Git-Worktree von ${view.displayName.replace(/ · Worktree$/, '')}. Er bekommt eigene Adressen, sobald er mit \`devhub up .\` (im Worktree ausgeführt) gestartet ist; danach gelten \`devhub status .\`, \`devhub logs .\` und \`devhub down .\`.`,
+      'Nicht das Hauptprojekt per Ordnername starten - es zeigt den Code des Hauptprojekts, nicht den dieses Worktrees. Nennt `devhub up .` fehlende Schritte (`.env`-Link, `npm ci`), diese ausführen und erneut starten.'
+    ].join('\n')
+  }
   const lines = view.processes.filter((p) => p.url).map((p) => `- ${p.name}${p.role ? ` (${p.role})` : ''}: ${p.url}`)
   if (!lines.length) return undefined
   return [
@@ -195,6 +203,9 @@ export function denyText(pattern: string, view: DevhubView | null): string {
   const head = `Dev-Server gehören devhub - "${pattern.trim()}" wird nicht selbst gestartet.`
   if (!view) {
     return `${head} Dieses Verzeichnis gehört zu keinem Projekt im Hub. \`devhub status\` zeigt alle Projekte, \`devhub up <ordner>\` startet eines.`
+  }
+  if (view.worktreePending) {
+    return `${head} Diese Sitzung liegt in einem Git-Worktree, der noch keinen eigenen Server hat. Stattdessen im Worktree \`devhub up .\` - er bekommt eigene Ports und eine eigene Adresse; nennt der Befehl fehlende Schritte, diese ausführen und wiederholen.`
   }
   if (!view.adopted) {
     return `${head} Das Projekt ${view.name} ist im Hub noch nicht aufgenommen: erst \`devhub adopt ${view.name}\`, dann \`devhub up ${view.name}\`.`

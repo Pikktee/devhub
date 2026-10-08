@@ -143,7 +143,18 @@ export function withoutPluginDir(settings, dir) {
   return { settings: next, changed: true }
 }
 
-const isDevhubHook = (entry) => entry.hooks?.some((inner) => inner.command?.includes(HOOK_SCRIPT_NAME))
+/**
+ * Neben dem eigenen Skript gibt es handgeschriebene Inline-Hooks mit derselben
+ * Aufgabe (erkennbar an ihrer Ablehnungsbegründung oder Statusmeldung). Mit Mod
+ * sperrten sie doppelt, also zählen sie als devhub-Hook.
+ */
+const DEVHUB_HOOK_MARKERS = [HOOK_SCRIPT_NAME, 'Dev-Server gehören devhub', 'Dev-Server gehoeren devhub']
+const isDevhubHook = (entry) =>
+  entry.hooks?.some(
+    (inner) =>
+      DEVHUB_HOOK_MARKERS.some((marker) => inner.command?.includes(marker)) ||
+      inner.statusMessage?.startsWith('devhub-Regel')
+  )
 
 export function hasDevhubHook(settings) {
   return Boolean(settings.hooks?.PreToolUse?.some(isDevhubHook))

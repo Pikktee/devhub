@@ -14,7 +14,7 @@ import {
   tailLog,
   up
 } from '../supervisor.js'
-import { worktreeInfo } from '../git.js'
+import { listWorktrees, worktreeInfo } from '../git.js'
 import { agentContext, readAgentFile } from '../agents.js'
 import { linkRuleFiles } from '../adapters/link.js'
 import { syncAll, syncGlobal, syncProject, unsyncProject } from '../sync.js'
@@ -24,6 +24,15 @@ import { instance } from '../paths.js'
 import { clearHubLog, recordEvent, readHubLogTail } from '../history.js'
 import { assertOpenablePath, openLocalPath } from '../open.js'
 import { bonjourHost, lanAddress, networkHostFor } from '../net.js'
+
+/** Worktrees, die git kennt, devhub aber noch nicht gestartet hat - damit man sie sieht. */
+function pendingWorktreesOf(registry, project) {
+  if (project.worktree || !project.adopted || !project.worktrees?.length) return []
+  const started = new Set(Object.values(registry.worktrees ?? {}).map((w) => w.path))
+  return listWorktrees(project.path)
+    .filter((w) => !w.missing && !started.has(w.path))
+    .map((w) => ({ path: w.path, branch: w.branch, label: registryStore.worktreeLabel(w) }))
+}
 
 async function projectPayload(registry, project, { withMemory = false } = {}) {
   const profiles = []
@@ -61,6 +70,8 @@ async function projectPayload(registry, project, { withMemory = false } = {}) {
     // bevor sie gestartet wurde.
     worktree: project.worktree ?? null,
     worktrees: project.worktrees ?? [],
+    worktreeData: Boolean(project.worktreeConfig?.daten?.length),
+    pendingWorktrees: pendingWorktreesOf(registry, project),
     profiles
   }
 }
@@ -79,7 +90,10 @@ export async function overview({ withMemory = false } = {}) {
   await pruneWorktrees()
   const registry = registryStore.load()
   const projects = await Promise.all(
-    withWorktrees(listProjects(registry), listWorktreeInstances(registry)).map((project) =>
+    (() => {
+      const all = listProjects(registry)
+      return withWorktrees(all, listWorktreeInstances(registry, new Map(all.map((p) => [p.name, p]))))
+    })().map((project) =>
       projectPayload(registry, project, { withMemory })
     )
   )
@@ -305,7 +319,10 @@ export const routes = [
       const project = describeProject(registry, name)
       const specs = project?.profiles[profile] ?? []
       const proc = query.get('process') ?? specs[0]?.name
-      if (!proc) throw Object.assign(new Error('Kein Prozess bekannt'), { status: 404 })
+      // Name und Prozess landen im Dateinamen - nur, was das Projekt wirklich hat.
+      if (!proc || !specs.some((s) => s.name === proc)) {
+        throw Object.assign(new Error('Kein solcher Prozess'), { status: 404 })
+      }
       const file = logFileFor(name, profile, proc)
       return {
         project: name,
@@ -359,6 +376,10 @@ export const routes = [
     handler: async (_req, _params, _query, body) => {
       const registry = registryStore.load()
       if (body.url) {
+        // `open` mit einem Dateipfad oder file:// führte ein Programm aus - nur Web-Adressen.
+        if (!/^https?:\/\//i.test(String(body.url))) {
+          throw Object.assign(new Error('Nur http(s)-Adressen lassen sich öffnen'), { status: 400 })
+        }
         spawn('open', [body.url], { detached: true, stdio: 'ignore' }).unref()
         return { opened: body.url }
       }

@@ -4,7 +4,7 @@ import { readJson } from './util/json.js'
 import { portFor, slugifyLabel, urlForRole, worktreePortFor } from './ports.js'
 import { BIND_ALL, networkUrlFor } from './net.js'
 import { repoRoot } from './paths.js'
-import { githubInfoFor, listWorktrees, realPath } from './git.js'
+import { githubInfoFor, listWorktrees, realPath, worktreeInfo } from './git.js'
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', '__pycache__'])
 const SUBDIR_CANDIDATES = ['web', 'app', 'frontend', 'client', 'site', 'landing', 'ui']
@@ -692,9 +692,11 @@ export function safeRelative(rel) {
  * die Quelle der Daten liegt ohnehin dort). Immer nur lokal erreichbar:
  * ungeprüfter Branch-Code gehört nicht ins WLAN.
  */
-function describeWorktree(registry, name) {
+function describeWorktree(registry, name, mains = new Map()) {
   const wt = registry.worktrees[name]
-  const main = describeProject(registry, wt.project)
+  // Die Übersicht fragt alle fünf Sekunden; ein Hauptprojekt mit mehreren Worktrees nur einmal beschreiben.
+  if (!mains.has(wt.project)) mains.set(wt.project, describeProject(registry, wt.project))
+  const main = mains.get(wt.project)
   const problems = []
   const mainLabel = main?.hostLabel ?? slugifyLabel(wt.project)
   const hostLabel = `${wt.label}.${mainLabel}`
@@ -719,6 +721,8 @@ function describeWorktree(registry, name) {
     return { ...base, stack: { kind: 'missing' }, profiles: {}, source: 'fehlt', sources: {}, problems: [`Worktree ${wt.path} existiert nicht`] }
   }
 
+  // Der Branch kann seit der Aufnahme gewechselt haben; die Adresse bleibt, die Anzeige nicht.
+  base.worktree.branch = worktreeInfo(wt.path)?.branch ?? null
   const stack = detectStack(wt.path)
   const inferred = inferProfiles(wt.path, stack, { network: false }) ?? {}
   let devJson = null
@@ -765,10 +769,10 @@ function describeWorktree(registry, name) {
 }
 
 /** Die registrierten Worktree-Instanzen, sortiert nach Projekt und Name. */
-export function listWorktreeInstances(registry) {
+export function listWorktreeInstances(registry, mains = new Map()) {
   return Object.keys(registry.worktrees ?? {})
     .sort((a, b) => a.localeCompare(b, 'de'))
-    .map((name) => describeWorktree(registry, name))
+    .map((name) => describeWorktree(registry, name, mains))
 }
 
 export function listProjects(registry) {

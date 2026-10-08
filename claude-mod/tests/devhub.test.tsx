@@ -340,6 +340,17 @@ describe('Worktrees', () => {
     expect(ran.deny).not.toContain('maptale.localhost:5123')
   })
 
+  test('das Modell erfährt schon vor dem ersten Start, wie es den Worktree startet', async ($, on) => {
+    fakeHub(on, { cwd: `${WORKTREE}/src` })
+    on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+    await imWorktree($)
+    const { blocks } = await $.prompt.context({ blocks: [] })
+    const text = blocks.find((b) => b.name === 'devhub')?.text ?? ''
+    expect(text).toContain('Git-Worktree von Maptale')
+    expect(text).toContain('devhub up .')
+    expect(text).not.toContain('5123')
+  })
+
   test('/devhub up nimmt ihn über den Pfad auf', async ($, on) => {
     const hub = fakeHub(on, { cwd: `${WORKTREE}/src` })
     await imWorktree($)

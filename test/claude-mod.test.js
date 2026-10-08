@@ -64,6 +64,21 @@ test('ohne übrige Hooks verschwindet der hooks-Block', () => {
   assert.deepEqual(withoutDevhubHook({ hooks: { PreToolUse: [devhub] } }).settings, {})
 })
 
+test('erkennt auch einen handgeschriebenen Inline-Hook', () => {
+  const inline = {
+    matcher: 'Bash',
+    hooks: [
+      {
+        type: 'command',
+        command: `cmd=$(jq -r '.tool_input.command'); printf '%s' '{"permissionDecisionReason":"Dev-Server gehoeren devhub."}'`,
+        statusMessage: 'devhub-Regel prüfen'
+      }
+    ]
+  }
+  assert.equal(hasDevhubHook({ hooks: { PreToolUse: [inline] } }), true)
+  assert.deepEqual(withoutDevhubHook({ hooks: { PreToolUse: [inline] } }).settings, {})
+})
+
 test('Hook und Mod prüfen dieselben Muster', () => {
   const skript = hookScript('devhub')
   for (const muster of DEV_SERVER_STARTS) assert.ok(skript.includes(`*"${muster}"*`), muster)

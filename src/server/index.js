@@ -17,15 +17,30 @@ function hostAllowed(req) {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1' || host.endsWith('.localhost')
 }
 
+const OWN_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', 'devhub.localhost'])
+
+/**
+ * Nur die eigene Oberfläche darf aus dem Browser schreiben. `*.localhost` mit
+ * beliebigem Port wären die Dev-Server selbst - ein fremdes Skript in einer App
+ * (oder ungeprüfter Branch-Code im Worktree) könnte sonst über /api/open oder den
+ * Editor-Befehl Programme starten. CLI und Mod schicken keinen Origin.
+ */
 function originAllowed(req) {
   const origin = req.headers.origin
   if (!origin) return true
   try {
-    const host = new URL(origin).hostname.toLowerCase()
-    return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost')
+    const url = new URL(origin)
+    const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80))
+    return OWN_HOSTS.has(url.hostname.toLowerCase()) && port === req.socket.localPort
   } catch {
     return false
   }
+}
+
+/** Ein Formular oder `fetch` ohne Preflight kann kein JSON als Content-Type setzen. */
+function writeAllowed(req) {
+  if (req.method === 'GET' || req.method === 'HEAD') return true
+  return /^application\/json\b/i.test(req.headers['content-type'] ?? '')
 }
 
 function readBody(req) {
@@ -64,6 +79,9 @@ export function createHub() {
   return http.createServer(async (req, res) => {
     if (!hostAllowed(req) || !originAllowed(req)) {
       return sendJson(res, 403, { error: 'Nur über localhost erreichbar' })
+    }
+    if (!writeAllowed(req)) {
+      return sendJson(res, 415, { error: 'Schreibende Anfragen nur mit Content-Type application/json' })
     }
 
     const url = new URL(req.url, 'http://localhost')

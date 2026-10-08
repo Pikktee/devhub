@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { logDir, repoRoot } from './paths.js'
+import { logDir, repoRoot, stateDir } from './paths.js'
 import * as registryStore from './registry.js'
 import * as stateStore from './state.js'
 import { describeProject, projectNameForPath, resolveProject } from './discovery.js'
@@ -8,11 +8,13 @@ import { hostFor, portFor, urlFor, urlForRole, worktreePortFor } from './ports.j
 import { listWorktrees } from './git.js'
 import { copyWorktreeData, missingPreparation } from './worktree.js'
 import { bindHostFor, networkHostFor } from './net.js'
-import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, probePort } from './probe.js'
+import { isAlive, listenerOn, listeningPortsOfGroup, memoryOfGroup, ownsGroup, probePort, startTimeOf } from './probe.js'
 import { logLine, openLog, startProcess, stopGroup } from './runners/process.js'
 import { composeDown, composeServices, composeUp, dockerAvailable } from './runners/compose.js'
 
-export const logFileFor = (project, profile, proc) => join(logDir, `${project}-${profile}-${proc}.log`)
+/** Ein `/` im Namen führte aus dem Log-Ordner hinaus - er wird zum Teil des Dateinamens. */
+const fileSafe = (part) => String(part).replaceAll('/', '%2F')
+export const logFileFor = (project, profile, proc) => join(logDir, `${fileSafe(project)}-${fileSafe(profile)}-${fileSafe(proc)}.log`)
 
 function requireInstance(registry, name, profile) {
   const project = describeProject(registry, name)
@@ -110,7 +112,25 @@ function settingsFor(project, registry) {
   return { ...registry, settings: { ...registry.settings, networkAccess: false } }
 }
 
-export async function up(name, { profile = 'default', registry = registryStore.load(), data = false } = {}) {
+/**
+ * Pro Instanz darf nur ein Start oder Stopp gleichzeitig laufen: CLI und Mod
+ * (über den Hub) messen sonst beide „Port frei“ und starten zweimal.
+ */
+function instanceLock(name, profile, fn) {
+  const file = join(stateDir, 'locks', `${encodeURIComponent(name)}~${encodeURIComponent(profile)}.lock`)
+  // Ein Start wartet bis zum Bereitschafts-Timeout - die Sperre darf so lange nicht als verwaist gelten.
+  return registryStore.withLock(fn, { file, timeoutMs: 15 * 60000, staleMs: 15 * 60000 })
+}
+
+export function up(name, options = {}) {
+  return instanceLock(name, options.profile ?? 'default', () => upUnlocked(name, options))
+}
+
+export function down(name, options = {}) {
+  return instanceLock(name, options.profile ?? 'default', () => downUnlocked(name, options))
+}
+
+async function upUnlocked(name, { profile = 'default', registry = registryStore.load(), data = false } = {}) {
   const { project, slot, specs } = requireInstance(registry, name, profile)
   registry = settingsFor(project, registry)
 
@@ -121,13 +141,21 @@ export async function up(name, { profile = 'default', registry = registryStore.l
     }
     const steps = missingPreparation(project, specs)
     if (steps.length) {
+      const shared = steps.some((step) => step.includes(' ln -s '))
       throw new Error(
-        `Der Worktree ist noch nicht vorbereitet. devhub richtet ihn nicht selbst ein, einmal ausführen:\n  ${steps.join('\n  ')}\ndanach erneut "devhub up ${project.path}".`
+        [
+          'Der Worktree ist noch nicht vorbereitet. devhub richtet ihn nicht selbst ein - einmal ausführen:',
+          ...steps.map((step) => `  ${step}`),
+          `danach im Worktree erneut: devhub up .${data ? ' --daten' : ''}`,
+          ...(shared
+            ? ['Die .env wird so mit dem Hauptprojekt geteilt. Werte, die abweichen müssen (Datenbank, eigene Adresse), gehören in devhub.json unter worktree.env.']
+            : [])
+        ].join('\n')
       )
     }
     if (data) {
       // Eine laufende Instanz hält die Datenbank offen - vorher stoppen.
-      await down(name, { profile, registry })
+      await downUnlocked(name, { profile, registry })
       copiedData = await copyWorktreeData(project)
     }
   } else if (data) {
@@ -185,6 +213,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
       runner: spec.runner,
       pid: proc.pid,
       pgid: proc.pgid,
+      started: await startTimeOf(proc.pid),
       cwd,
       logFile,
       url: spec.url,
@@ -261,7 +290,7 @@ export async function up(name, { profile = 'default', registry = registryStore.l
   }
 }
 
-export async function down(name, { profile = 'default', registry = registryStore.load() } = {}) {
+async function downUnlocked(name, { profile = 'default', registry = registryStore.load() } = {}) {
   const recorded = stateStore.get(name, profile)
   const project = describeProject(registry, name)
   const stopped = []
@@ -271,6 +300,11 @@ export async function down(name, { profile = 'default', registry = registryStore
     if (proc.runner === 'compose') {
       await composeDown({ cwd: proc.cwd, file: proc.composeFile, logFile: proc.logFile })
       stopped.push(proc.name)
+      continue
+    }
+    if (!(await ownsGroup(proc))) {
+      // Vermerkt, aber nicht mehr unsere Gruppe (Neustart, PID neu vergeben): nur austragen.
+      if (isAlive(proc.pgid ?? proc.pid)) remaining.push(`${proc.name}: Gruppe ${proc.pgid ?? proc.pid} gehört nicht mehr zu devhub - nicht beendet`)
       continue
     }
     await stopGroup(proc.pgid ?? proc.pid)
@@ -289,9 +323,11 @@ export async function down(name, { profile = 'default', registry = registryStore
   return { ok: remaining.length === 0, project: name, profile, stopped, warnings: remaining, known: Boolean(recorded), path: project?.path }
 }
 
-export async function restart(name, options = {}) {
-  await down(name, options)
-  return up(name, options)
+export function restart(name, options = {}) {
+  return instanceLock(name, options.profile ?? 'default', async () => {
+    await downUnlocked(name, options)
+    return upUnlocked(name, options)
+  })
 }
 
 function hostOf(url) {
@@ -365,6 +401,11 @@ async function slotBusy(slot) {
 export async function registerWorktree(info) {
   return registryStore.withLock(async () => {
     const registry = registryStore.load()
+    // Eine selbst gebaute .git-Datei, die aufs echte Repo zeigt, ist kein Worktree:
+    // git kennt ihn nicht, und das Aufräumen würde ihn sofort wieder stoppen.
+    if (!listWorktrees(info.mainPath).some((w) => w.path === info.root && !w.missing)) {
+      throw new Error(`${info.root} ist in "git worktree list" von ${info.mainPath} nicht eingetragen`)
+    }
     const project = projectNameForPath(registry, info.mainPath)
     if (!project) {
       throw new Error(`Das Hauptprojekt ${info.mainPath} liegt in keinem Wurzelverzeichnis von devhub`)

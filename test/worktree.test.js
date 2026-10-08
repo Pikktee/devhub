@@ -352,3 +352,16 @@ test('Hinweisbefehle sind für die Shell gequotet', () => {
   assert.equal(shellQuote('/Volumes/Daten 2/wt'), "'/Volumes/Daten 2/wt'")
   assert.equal(shellQuote("/tmp/$(rm -rf ~)'x"), "'/tmp/$(rm -rf ~)'\\''x'")
 })
+
+test('eine gebastelte .git-Datei macht keinen Worktree', async () => {
+  const { wurzel, haupt } = repoMitWorktree()
+  registryStore.save(registryMit(wurzel))
+  const falsch = join(wurzel, 'falsch')
+  mkdirSync(join(falsch, 'meta'), { recursive: true })
+  writeFileSync(join(falsch, 'meta', 'commondir'), join(haupt, '.git'))
+  writeFileSync(join(falsch, 'meta', 'HEAD'), 'ref: refs/heads/main\n')
+  writeFileSync(join(falsch, '.git'), `gitdir: ${join(falsch, 'meta')}\n`)
+  const info = worktreeInfo(falsch)
+  assert.equal(info.isWorktree, true, 'die Metadaten allein sähen echt aus')
+  await assert.rejects(() => supervisor.registerWorktree(info), /nicht eingetragen/)
+})

@@ -96,3 +96,31 @@ export async function memoryOfGroup(pgid) {
   const members = await groupMembers(pgid)
   return members.reduce((sum, member) => sum + member.rss, 0)
 }
+
+/** Startzeit eines Prozesses, wie `ps` sie sieht - zusammen mit der PID ein Ausweis. */
+export async function startTimeOf(pid) {
+  if (!pid) return null
+  try {
+    const { stdout } = await run('ps', ['-o', 'lstart=', '-p', String(pid)], { timeout: 5000 })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Gehört die Gruppe noch uns? state.json überlebt einen Neustart, PIDs nicht:
+ * dieselbe Nummer kann inzwischen eine Shell im Terminal sein. Erkannt wird die
+ * eigene Gruppe an der Startzeit ihres Anführers, sonst daran, dass sie auf dem
+ * zugewiesenen Port lauscht. Ohne Beleg wird nichts beendet.
+ */
+export async function ownsGroup({ pgid, pid, started, port }) {
+  const leader = pgid ?? pid
+  if (!leader) return false
+  if (started) {
+    const now = await startTimeOf(leader)
+    if (now) return now === started
+  }
+  if (!port) return false
+  return (await listeningPortsOfGroup(leader)).includes(port)
+}

@@ -659,6 +659,7 @@ body::before {
 }
 .zeile:last-child { border-bottom: 0; }
 .zeile.worktree .name-text { padding-left: 1.1rem; position: relative; }
+.zeile.wartend .name-text { color: var(--text-leise); }
 .zeile.worktree .name-text::before {
   content: '↳';
   position: absolute;
@@ -1994,6 +1995,7 @@ pre.log .hl { color: var(--text); }
   pointer-events: none;
   transition: opacity 180ms var(--ease), transform 180ms var(--ease);
 }
+#meldung[data-typ="fehler"] { white-space: pre-line; }
 #meldung[data-offen] {
   opacity: 1;
   pointer-events: auto;

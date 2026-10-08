@@ -26,6 +26,8 @@ Verboten: `npm run dev`, `pnpm dev`, `yarn dev`, `bun dev`, `vite`, `next dev`,
    Anzeige-Host, Backend = meist `http://127.0.0.1:<port>`). Nie
    `http://<anzeigename>.localhost:<backend-port>` erfinden.
 3. Wenn nötig: `devhub up <ordner>` - startet alle Rollen (Frontend und API).
+   **Im Git-Worktree stattdessen `devhub up .`** (und `status .`, `logs .`, `down .`) -
+   der Ordnername meint das Hauptprojekt mit dessen Code.
 4. Nutzer-URL = Frontend-Zeile aus dem Status (z. B. `http://maptale.localhost:5120`).
 5. Bei Startfehlern: `devhub logs <ordner>` lesen, nicht parallel selbst starten.
 6. Stoppen: `devhub down <ordner>` (ganze Prozessgruppe).
@@ -36,8 +38,8 @@ Verboten: `npm run dev`, `pnpm dev`, `yarn dev`, `bun dev`, `vite`, `next dev`,
 
 - `devhub up` ist idempotent, wenn der Server schon läuft.
 - Profil/Smoke: `devhub up <ordner> --profil smoke` (eigener Slot/Host).
-- Git-Worktree: im Worktree `devhub up .` - eigene Instanz `<ordner>@<branch>` mit
-  eigenen Ports (52NN/88NN) und Adresse `<branch>.<anzeigename>.localhost`. Danach
+- Git-Worktree: im Worktree `devhub up .` - eigene Instanz `<ordner>@<branch-ende>` mit
+  eigenen Ports (52NN/88NN) und Adresse `<branch-ende>.<anzeigename>.localhost`. Danach
   `devhub status .`, `devhub logs .`, `devhub down .`. Nennt `up` fehlende Schritte
   (`.env`-Link, `npm ci`), diese ausführen und erneut starten. Daten aus dem
   Hauptprojekt nur mit `devhub up . --daten`.

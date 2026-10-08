@@ -129,8 +129,11 @@ function zeigeMeldung(inhalt, typ = 'fehler', { dauerMs } = {}) {
   const ms = dauerMs ?? (typ === 'fehler' ? 9000 : 4500)
   meldungTimer = setTimeout(() => kasten.removeAttribute('data-offen'), ms)
 }
+/** Mehrzeilige Fehler enthalten Befehle zum Abtippen - die bleiben, bis man sie wegklickt. */
 function zeigeFehler(text) {
-  zeigeMeldung(text, 'fehler')
+  const mehrzeilig = typeof text === 'string' && text.includes('\n')
+  zeigeMeldung(text, 'fehler', mehrzeilig ? { dauerMs: 10 * 60 * 1000 } : {})
+  if (mehrzeilig) $('#meldung').onclick = () => $('#meldung').removeAttribute('data-offen')
 }
 function zeigeOk(text) {
   zeigeMeldung(text, 'ok')
@@ -1175,6 +1178,18 @@ function zeileHtml(projekt, profil) {
   </div>`
 }
 
+function wartendeWorktreeZeile(projekt, wt) {
+  const titel = `${wt.branch ? `Branch ${wt.branch}` : 'detached HEAD'} · ${wt.path}`
+  return `<div class="zeile worktree wartend">
+    <span class="punkt"></span>
+    <span class="power"><button type="button" class="knopf symbol start" data-aktion="worktree-start" data-pfad="${h(wt.path)}" title="Als eigene Instanz starten (wie devhub up . im Worktree)" aria-label="Worktree ${h(wt.label)} starten">${iconPlay}</button></span>
+    <span class="name"><span class="name-text"><span title="${h(titel)}">${h(anzeigeName(projekt))} · ${h(wt.label)}</span></span></span>
+    <span class="adr aus">-</span>
+    <span class="meta">nicht gestartet</span>
+    <span class="aktionen"></span>
+  </div>`
+}
+
 function ohneStartHtml(projekt) {
   const hinweis = projekt.problems[0] ?? 'Kein Server erkennbar'
   const kurz =
@@ -1290,6 +1305,8 @@ function rendereUebersicht() {
       else if (profil.state === 'läuft' || profil.state === 'teilweise') laufend.push(html)
       else gestoppt.push(html)
     }
+    // Worktrees, die git kennt, aber noch nie gestartet wurden: leise unter „Gestoppt“.
+    for (const wt of projekt.pendingWorktrees ?? []) gestoppt.push(wartendeWorktreeZeile(projekt, wt))
   }
 
   const kandidatenEl = $('#kandidaten')
@@ -1347,7 +1364,11 @@ function detailMenu(projekt, profil) {
 
   // Ein Worktree hat keinen eigenen Titel und keine Agent-Dateien - nur Daten und Platz.
   if (projekt.worktree) {
-    const verwaltung = [menuKnopf('Daten aus dem Hauptprojekt kopieren…', { aktion: 'worktree-daten', projekt: projekt.name })]
+    const verwaltung = [
+      projekt.worktreeData
+        ? menuKnopf('Daten aus dem Hauptprojekt kopieren…', { aktion: 'worktree-daten', projekt: projekt.name })
+        : `<button type="button" class="menu-eintrag" role="menuitem" disabled title="In devhub.json des Hauptprojekts ist unter worktree.daten nichts eingetragen">Daten kopieren (nichts festgelegt)</button>`
+    ]
     if (profil) verwaltung.push(menuKnopf('Neu starten', { aktion: 'neu', projekt: projekt.name, profil: profil.profile }))
     const gefahr = [menuKnopf('Worktree-Platz freigeben…', { aktion: 'worktree-freigeben', projekt: projekt.name }, { gefahr: true })]
     return aktionenMenu([ort, verwaltung, gefahr])
@@ -3192,10 +3213,14 @@ async function aktionAusfuehren(aktion, kontext = {}, knopf = null) {
         const ergebnis = await api('/api/sync', { method: 'POST', body: JSON.stringify({ project: projekt }) })
         zeigeSyncBericht(ergebnis, { titel: `Agent-Dateien · ${projekt}` })
       })
+    case 'worktree-start':
+      return handle(knopf, () =>
+        api('/api/worktrees/up', { method: 'POST', body: JSON.stringify({ path: pfad }) })
+      )
     case 'worktree-daten': {
       const wahl = await frageBestaetigung({
         titel: `Daten kopieren · ${projekt}`,
-        text: 'Ersetzt die Daten des Worktrees durch eine Kopie aus dem Hauptprojekt (worktree.daten in devhub.json). Eine laufende Instanz wird dafür neu gestartet.',
+        text: 'Ersetzt die Daten des Worktrees durch eine Kopie aus dem Hauptprojekt (worktree.daten in devhub.json). Läuft der Worktree, wird er dafür gestoppt; danach startet er mit den kopierten Daten.',
         okLabel: 'Kopieren'
       })
       if (!wahl.ok) return

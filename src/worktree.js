@@ -173,6 +173,11 @@ export async function copyWorktreeData(project) {
       throw new Error(`"${raw}" zeigt im Worktree auf ${realPath(target)} - das ist nicht der Worktree, nichts kopiert`)
     }
     const directory = statSync(src).isDirectory()
+    // Unmittelbar vor dem Löschen noch einmal: ein Checkout im Worktree kann den
+    // Ordner seit der ersten Prüfung gegen einen Symlink getauscht haben.
+    if (realPath(dirname(target)) !== dirname(target) || !inside(target, wtReal)) {
+      throw new Error(`"${raw}": der Ordner hat sich während der Kopie geändert - nichts ersetzt`)
+    }
 
     if (!directory && isSqlite(src)) {
       for (const suffix of ['', '-wal', '-shm', '-journal']) rmSync(`${target}${suffix}`, { force: true })

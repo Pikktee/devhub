@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { registryFile } from './paths.js'
@@ -184,11 +184,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 /**
  * Mehrere Agenten rufen `devhub up .` gleichzeitig auf. Ohne Sperre lesen beide
  * dieselbe Registry, nehmen denselben freien Platz und der Letzte gewinnt.
- * Die Sperre ist eine Datei, die exklusiv angelegt wird; eine verwaiste (Prozess
- * abgestürzt) gilt nach 30 Sekunden als abgelaufen.
+ * Die Sperre ist eine Datei, die exklusiv angelegt wird; sie gilt als verwaist,
+ * wenn ihr Prozess nicht mehr lebt oder sie älter als `staleMs` ist.
  */
-export async function withLock(fn, { timeoutMs = 10000 } = {}) {
-  const lock = `${registryFile}.lock`
+/** Verwaist ist eine Sperre, deren Prozess nicht mehr lebt - oder die sehr alt ist. */
+function lockAbandoned(lock, staleMs) {
+  const holder = Number(readFileSync(lock, 'utf8').split('-')[0])
+  if (holder) {
+    try {
+      process.kill(holder, 0)
+    } catch (err) {
+      if (err.code === 'ESRCH') return true
+    }
+  }
+  return Date.now() - statSync(lock).mtimeMs > staleMs
+}
+
+export async function withLock(fn, { timeoutMs = 10000, staleMs = 30000, file = `${registryFile}.lock` } = {}) {
+  const lock = file
   const token = `${process.pid}-${Math.random().toString(36).slice(2)}`
   mkdirSync(dirname(lock), { recursive: true })
   const deadline = Date.now() + timeoutMs
@@ -201,8 +214,11 @@ export async function withLock(fn, { timeoutMs = 10000 } = {}) {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 30000) {
-          unlinkSync(lock)
+        if (lockAbandoned(lock, staleMs)) {
+          // Umbenennen statt löschen: von zwei Wartenden gewinnt genau einer, der
+          // andere entfernt sonst die eben frisch angelegte Sperre des ersten.
+          renameSync(lock, `${lock}.verwaist-${token}`)
+          unlinkSync(`${lock}.verwaist-${token}`)
           continue
         }
       } catch {
@@ -266,8 +282,10 @@ export async function allocateWorktree(registry, { project, path, branch, folder
     break
   }
   if (slot === undefined) {
+    const names = Object.keys(registry.worktrees).sort((a, b) => a.localeCompare(b, 'de'))
     throw new Error(
-      `Alle ${WORKTREE_SLOT_MAX - WORKTREE_SLOT_MIN + 1} Worktree-Plätze sind belegt - "devhub status" räumt verschwundene Worktrees ab, "devhub forget <projekt@worktree>" gibt einen frei`
+      `Alle ${WORKTREE_SLOT_MAX - WORKTREE_SLOT_MIN + 1} Worktree-Plätze sind belegt (${names.join(', ')}). ` +
+        `"devhub forget <name>" gibt einen frei; welche laufen, zeigt "devhub ports".`
     )
   }
 

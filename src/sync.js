@@ -132,6 +132,8 @@ Coding-Agenten starten **keine** eigenen Instanzen.
 auch nicht „kurz zum Testen“.
 
 ### Stattdessen (CLI \`devhub\`)
+0. **Im Git-Worktree immer \`.\` statt des Ordnernamens** (\`devhub up .\`, \`status .\`,
+   \`logs .\`, \`down .\`) - der Ordnername startet das Hauptprojekt mit dessen Code.
 1. \`devhub status\` - läuft etwas, welche URL/Ports?
 2. \`devhub up <ordner>\` - startet abgekoppelt (Ordnername unter ~/Dev, z. B. \`journey\`, nicht der Anzeigename).
 3. \`devhub down <ordner>\` - stoppt die **ganze** Prozessgruppe (Frontend+API).
@@ -139,12 +141,11 @@ auch nicht „kurz zum Testen“.
 5. Übersicht: http://devhub.localhost:4000
 
 ### Worktrees
-In einem Git-Worktree startet \`devhub up .\` eine eigene Instanz mit eigenen Ports
-und eigener Adresse (\`<branch>.<anzeigename>.localhost\`); \`devhub status .\`,
-\`devhub logs .\` und \`devhub down .\` gelten dann ihr. Nie das Hauptprojekt starten,
-um einen Worktree zu prüfen - es zeigt den falschen Code. Fehlen \`.env\` oder
-\`node_modules\`, nennt \`devhub up .\` die Befehle; Daten aus dem Hauptprojekt
-nur auf Wunsch mit \`devhub up . --daten\`.
+\`devhub up .\` im Worktree startet eine eigene Instanz \`<ordner>@<branch-ende>\` mit
+eigenen Ports und eigener Adresse (\`<branch-ende>.<anzeigename>.localhost\`).
+Nennt \`up\` fehlende Schritte (\`.env\`-Link, \`npm ci\`): genau diese ausführen,
+dann \`devhub up .\` wiederholen. Daten aus dem Hauptprojekt nur auf Wunsch mit
+\`devhub up . --daten\`.
 
 ### Adressen
 Die URL kommt aus dem **Anzeigenamen** (\`http://maptale.localhost:5120\`),
