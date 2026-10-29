@@ -258,20 +258,26 @@ export function worktreeByPath(registry, path) {
   return Object.entries(registry.worktrees ?? {}).find(([, entry]) => entry.path === path)?.[0] ?? null
 }
 
+/** Zuletzt gestartet; nie gestartet zählt ab der Aufnahme. */
+function lastUsed(entry) {
+  return entry.lastUpAt ?? entry.addedAt ?? ''
+}
+
 /**
  * Vergibt Namen und Platz für einen Worktree (unter Sperre aufrufen). Die
  * Adresse bleibt, solange es den Worktree gibt - auch wenn darin später der
  * Branch wechselt, sonst wanderte die URL unter laufenden Sitzungen.
  * `isBusy(slot)` lässt Plätze aus, deren Ports ein fremder Prozess hält.
+ *
+ * Ist der Pool voll, verliert der am längsten nicht gestartete Worktree, der
+ * gerade nicht läuft, seinen Eintrag: Claude Code lässt erledigte Worktrees
+ * liegen, und die hielten sonst alle Plätze. Sein nächstes `devhub up` nimmt
+ * ihn neu auf - meist unter derselben Adresse, aber mit anderem Port.
  */
 export async function allocateWorktree(registry, { project, path, branch, folder }, { isBusy = async () => false } = {}) {
   registry.worktrees ??= {}
   const existing = worktreeByPath(registry, path)
-  if (existing) return { name: existing, entry: registry.worktrees[existing], created: false }
-
-  const base = worktreeLabel({ branch, folder })
-  let label = base
-  for (let n = 2; registry.worktrees[`${project}@${label}`]; n++) label = `${base}-${n}`
+  if (existing) return { name: existing, entry: registry.worktrees[existing], created: false, evicted: null }
 
   const taken = new Set(Object.values(registry.worktrees).map((entry) => entry.slot))
   let slot
@@ -281,18 +287,44 @@ export async function allocateWorktree(registry, { project, path, branch, folder
     slot = candidate
     break
   }
+
+  let evicted = null
+  if (slot === undefined) {
+    const oldestFirst = Object.entries(registry.worktrees).sort(([, a], [, b]) => lastUsed(a).localeCompare(lastUsed(b)))
+    for (const [candidate, entry] of oldestFirst) {
+      // Die Port-Probe entscheidet, ob er läuft - nicht ein vermerkter Start.
+      if (await isBusy(entry.slot)) continue
+      evicted = candidate
+      slot = entry.slot
+      delete registry.worktrees[candidate]
+      break
+    }
+  }
   if (slot === undefined) {
     const names = Object.keys(registry.worktrees).sort((a, b) => a.localeCompare(b, 'de'))
     throw new Error(
-      `Alle ${WORKTREE_SLOT_MAX - WORKTREE_SLOT_MIN + 1} Worktree-Plätze sind belegt (${names.join(', ')}). ` +
-        `"devhub forget <name>" gibt einen frei; welche laufen, zeigt "devhub ports".`
+      `Alle ${WORKTREE_SLOT_MAX - WORKTREE_SLOT_MIN + 1} Worktree-Plätze sind belegt und laufen (${names.join(', ')}). ` +
+        `"devhub down <name>" stoppt einen; welche laufen, zeigt "devhub ports".`
     )
   }
+
+  // Erst nach dem Verdrängen: dessen Label ist dann wieder frei.
+  const base = worktreeLabel({ branch, folder })
+  let label = base
+  for (let n = 2; registry.worktrees[`${project}@${label}`]; n++) label = `${base}-${n}`
 
   const name = `${project}@${label}`
   const entry = { project, path, label, branch: branch ?? null, slot, addedAt: new Date().toISOString() }
   registry.worktrees[name] = entry
-  return { name, entry, created: true }
+  return { name, entry, created: true, evicted }
+}
+
+/** Merkt den Start vor, damit beim vollen Pool der richtige Worktree weichen muss (unter Sperre aufrufen). */
+export function touchWorktree(registry, name) {
+  const entry = registry.worktrees?.[name]
+  if (!entry) return false
+  entry.lastUpAt = new Date().toISOString()
+  return true
 }
 
 export function removeWorktree(registry, name) {

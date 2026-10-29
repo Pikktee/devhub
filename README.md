@@ -163,6 +163,11 @@ So unterscheidet sich ein Worktree vom Hauptprojekt:
   `devhub up` und die Übersicht seine Prozesse und geben den Platz frei. Ein
   Worktree auf einem gerade nicht eingehängten Volume zählt nicht als verschwunden.
   Von Hand freigeben: `devhub forget nordlicht@export-gpx`.
+- **Ist der Pool voll, weicht der älteste ruhende Worktree.** Claude Code lässt
+  erledigte Worktrees liegen; sonst hielten die alle Plätze. Verdrängt wird der
+  am längsten nicht gestartete, dessen Ports gerade frei sind. Sein nächstes
+  `devhub up .` nimmt ihn neu auf, meist unter derselben Adresse, aber mit
+  anderem Port. Erst wenn alle 20 tatsächlich laufen, lehnt devhub ab.
 - **Die `.env` wird per Symlink geteilt.** Werte, die im Worktree anders sein
   müssen, etwa eine Datenbank-URL oder die eigene Adresse, gehören in die
   `devhub.json` des Hauptprojekts (siehe unten).

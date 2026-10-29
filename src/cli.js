@@ -275,6 +275,9 @@ async function cmdUp(positionals, flags) {
     console.log(
       `${color.green('+')} ${name} aufgenommen · Platz ${fresh.slot} · Ports ${worktreePortFor(fresh.slot, 'frontend')} / ${worktreePortFor(fresh.slot, 'backend')}`
     )
+    for (const gone of Object.keys(before.worktrees).filter((w) => !registry.worktrees[w])) {
+      console.log(color.dim(`↳ Platz von ${gone} übernommen - lief nicht; sein nächstes "devhub up" vergibt ihm einen neuen`))
+    }
   }
   const sep = fresh ? ' · ' : '/'
 

@@ -56,6 +56,9 @@ deshalb niemand im laufenden Server prüfen.
   Port-Besitzer darüber nach, `claude-mod/hooks/hub.ts:187`).
 - Ein Platz ist an einen existierenden Worktree vermietet und wird frei, sobald der
   Worktree verschwindet. Ob er belegt ist, entscheidet die Port-Probe, nicht die Datei.
+- Nachtrag: Ist der Pool voll, verliert der am längsten nicht gestartete Worktree,
+  der gerade nicht läuft, seinen Platz (`lastUpAt`, sonst `addedAt`). Erledigte
+  Claude-Worktrees blieben sonst liegen und hielten alle 20 Plätze.
 - Registry-Schreiben mit Sperre bzw. atomar, damit parallele Agenten nicht denselben
   Platz bekommen.
 - Restrisiko bei Wiederverwendung: eine alte Adresse öffnet später einen anderen

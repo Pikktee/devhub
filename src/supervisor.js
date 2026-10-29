@@ -133,6 +133,12 @@ export function down(name, options = {}) {
 async function upUnlocked(name, { profile = 'default', registry = registryStore.load(), data = false } = {}) {
   const { project, slot, specs } = requireInstance(registry, name, profile)
   registry = settingsFor(project, registry)
+  if (project.worktree) {
+    await registryStore.withLock(async () => {
+      const fresh = registryStore.load()
+      if (registryStore.touchWorktree(fresh, name)) registryStore.save(fresh, { worktrees: true })
+    })
+  }
 
   let copiedData = null
   if (project.worktree) {
@@ -399,7 +405,7 @@ async function slotBusy(slot) {
  * den Instanznamen `projekt@label`. `info` kommt aus `worktreeInfo()`.
  */
 export async function registerWorktree(info) {
-  return registryStore.withLock(async () => {
+  const { name, evicted, before } = await registryStore.withLock(async () => {
     const registry = registryStore.load()
     // Eine selbst gebaute .git-Datei, die aufs echte Repo zeigt, ist kein Worktree:
     // git kennt ihn nicht, und das Aufräumen würde ihn sofort wieder stoppen.
@@ -410,14 +416,18 @@ export async function registerWorktree(info) {
     if (!project) {
       throw new Error(`Das Hauptprojekt ${info.mainPath} liegt in keinem Wurzelverzeichnis von devhub`)
     }
-    const { name, created } = await registryStore.allocateWorktree(
+    const before = registryStore.load()
+    const { name, created, evicted } = await registryStore.allocateWorktree(
       registry,
       { project, path: info.root, branch: info.branch, folder: info.folder },
       { isBusy: slotBusy }
     )
     if (created) registryStore.save(registry, { worktrees: true })
-    return name
+    return { name, evicted, before }
   })
+  // Läuft nicht (Port-Probe), kann aber noch einen Eintrag im Zustand haben - wie beim Aufräumen.
+  if (evicted) await down(evicted, { registry: before })
+  return name
 }
 
 /** Ein nicht eingehängtes Volume ist kein gelöschter Worktree. */

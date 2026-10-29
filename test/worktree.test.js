@@ -92,7 +92,37 @@ test('Plätze: gleicher Pfad behält seinen, Namen kollidieren nicht, frei wird 
   for (let i = ports.WORKTREE_SLOT_MIN; i <= ports.WORKTREE_SLOT_MAX; i++) {
     await registryStore.allocateWorktree(voll, { project: 'p', path: `/w${i}`, branch: `b${i}` })
   }
-  await assert.rejects(() => registryStore.allocateWorktree(voll, { project: 'p', path: '/zuviel', branch: 'z' }), /Plätze sind belegt/)
+  await assert.rejects(
+    () => registryStore.allocateWorktree(voll, { project: 'p', path: '/zuviel', branch: 'z' }, { isBusy: async () => true }),
+    /Plätze sind belegt und laufen/
+  )
+})
+
+test('voller Pool: der am längsten nicht gestartete, ruhende Worktree weicht', async () => {
+  const voll = { worktrees: {} }
+  for (let i = ports.WORKTREE_SLOT_MIN; i <= ports.WORKTREE_SLOT_MAX; i++) {
+    const { name } = await registryStore.allocateWorktree(voll, { project: 'p', path: `/w${i}`, branch: `b${i}` })
+    voll.worktrees[name].addedAt = `2026-10-${String(i - 9).padStart(2, '0')}T00:00:00.000Z`
+  }
+  // b10 ist der älteste, wurde aber gerade gestartet; b11 läuft noch.
+  assert.ok(registryStore.touchWorktree(voll, 'p@b10'))
+  const laeuft = voll.worktrees['p@b11'].slot
+
+  const neu = await registryStore.allocateWorktree(
+    voll,
+    { project: 'p', path: '/neu', branch: 'b12' },
+    { isBusy: async (slot) => slot === laeuft }
+  )
+  assert.equal(neu.evicted, 'p@b12', 'b10 frisch gestartet, b11 läuft - also b12')
+  assert.equal(neu.name, 'p@b12', 'das Label des Verdrängten ist wieder frei')
+  assert.equal(neu.entry.path, '/neu')
+  assert.equal(neu.entry.slot, ports.WORKTREE_SLOT_MIN + 2)
+  assert.ok(voll.worktrees['p@b10'] && voll.worktrees['p@b11'])
+  assert.equal(Object.keys(voll.worktrees).length, ports.WORKTREE_SLOT_MAX - ports.WORKTREE_SLOT_MIN + 1)
+
+  const zurueck = await registryStore.allocateWorktree(voll, { project: 'p', path: '/w12', branch: 'b12' })
+  assert.equal(zurueck.evicted, 'p@b11', 'der Verdrängte kommt zurück; b11 ist inzwischen gestoppt und weicht')
+  assert.equal(zurueck.name, 'p@b12-2', 'sein altes Label ist inzwischen vergeben')
 })
 
 test('parallele Aufnahmen bekommen verschiedene Plätze', async () => {
