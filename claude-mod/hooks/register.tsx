@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { DevhubProcess, DevhubView } from '../types'
+import type { DevhubView } from '../types'
 import { matchDevServerStart } from './dev-server-patterns.js'
 import {
-  backendsOf,
+  bandOf,
   composeText,
   denyText,
   errorLines,
@@ -110,6 +110,32 @@ async function refresh($: Engine): Promise<DevhubView | null> {
   return next
 }
 
+type Verb = 'up' | 'down' | 'restart'
+
+/**
+ * Startet, stoppt oder startet neu - für den Befehl und die Knöpfe im Band
+ * derselbe Weg. Ein noch unbekannter Worktree hat keinen Namen im Hub; er wird
+ * über seinen Pfad aufgenommen.
+ */
+async function control(
+  $: Engine,
+  v: Pick<DevhubView, 'name' | 'profile' | 'worktreePending' | 'worktreePath'>,
+  verb: Verb
+): Promise<{ name: string; warnings: string[] }> {
+  const result: { name?: string; warnings?: unknown[] } =
+    v.worktreePending && verb === 'up'
+      ? await hubJson<{ name: string; warnings?: unknown[] }>($, '/api/worktrees/up', { method: 'POST', body: { path: v.worktreePath } })
+      : await hubJson<{ warnings?: unknown[] }>($, `/api/projects/${encodeURIComponent(v.name)}/${verb}`, {
+          method: 'POST',
+          body: { profile: v.profile }
+        })
+  const warnings = (result.warnings ?? []).map((w) => (typeof w === 'string' ? w : JSON.stringify(w)))
+  return { name: result.name ?? v.name, warnings }
+}
+
+/** Solange ein Knopf im Band arbeitet: sein Verb, damit er nicht doppelt drückt. */
+let busy: Verb | null = null
+
 type LogPayload = { process: string; processes: string[]; lines: string[] }
 
 async function logText(
@@ -142,7 +168,11 @@ async function logText(
 }
 
 function describe(v: DevhubView): string {
-  const lines = [statusText(v) ?? `devhub ${v.displayName}: nicht aufgenommen (devhub adopt ${v.name})`]
+  const lines = [
+    v.adopted
+      ? `${statusText(v)} · ${v.displayName}${v.worktreeLabel ? ` (Worktree ${v.worktreeLabel})` : ''}`
+      : `devhub ${v.displayName}: nicht aufgenommen (devhub adopt ${v.name})`
+  ]
   for (const p of v.processes) {
     lines.push(`  ${p.listening ? '●' : '○'} ${p.name.padEnd(8)} ${p.role ?? ''} ${p.url ?? (p.port ? `:${p.port}` : '-')}${p.foreign ? '  ⚠ fremd belegt' : ''}`)
   }
@@ -164,38 +194,86 @@ export const register: Register = (on) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const v = await read($, view)
-    if (e.props.hasSurvey || !v?.adopted || v.state === 'aus') return next(e)
-    const front = frontendOf(v)
-    const backends = backendsOf(v)
-    const live = [front, ...backends].filter((p): p is DevhubProcess => Boolean(p?.listening && p.url))
-    if (!live.length) return next(e)
+    const band = bandOf(await read($, view), hubPort)
+    if (e.props.hasSurvey || !band) return next(e)
     const { Box, Text, Link, Button } = $.ui.resolve(e)
-    const labelOf = (p: DevhubProcess) =>
-      p === front ? 'Frontend' : p.role === 'backend' ? `API${backends.length > 1 ? ` ${p.name}` : ''}` : p.name
+    const color = { ok: 'success', partial: 'warning', warn: 'error', off: 'inactive' }[band.tone]
+    // Link öffnet nur im Terminal jede Adresse; Desktop und Editor zeichnen
+    // alles außer https: als reinen Text. Dort öffnet ein Knopf genau die
+    // Adresse, die der Hub vergeben hat - auf localhost umzuschreiben hieße
+    // andere Cookies. Auf dem Handy führt eine localhost-Adresse nirgends hin.
+    const opener = (key: string, target: { href: string; text: string }, dim = false) => {
+      if (e.surface === 'terminal') {
+        return (
+          <Text key={key} dimColor={dim}>
+            <Link href={target.href} label={target.text} />
+          </Text>
+        )
+      }
+      if (e.surface === 'mobile') {
+        return (
+          <Text key={key} dimColor={dim}>
+            {target.text}
+          </Text>
+        )
+      }
+      return <Button key={key} label={target.text} plain dimColor={dim} onPress={() => void $.process.run(['open', target.href])} />
+    }
+    const press = (verb: Verb) => async () => {
+      const v = await read($, view)
+      if (!v || busy) return
+      busy = verb
+      $.ui.toast(verb === 'up' ? `devhub: ${v.displayName} startet …` : `devhub: ${v.displayName} startet neu …`)
+      try {
+        const { warnings } = await control($, v, verb)
+        for (const w of warnings) $.ui.toast(`devhub ⚠ ${w}`)
+      } catch (err) {
+        $.ui.toast(`devhub ${verb}: ${(err as Error).message}`)
+      } finally {
+        busy = null
+        await refresh($)
+      }
+    }
+    const MARK = { läuft: '✓', aus: 'aus', fremd: 'fremd' } as const
     return (
-      <Box flexDirection="row" gap={1}>
-        <Text dimColor>
-          devhub {v.state === 'läuft' ? '●' : '◐'} {v.displayName}
-        </Text>
-        {live.map((p) => {
-          const url = new URL(p.url!)
-          // Link nimmt nur https: und http://localhost. Die Adresse auf localhost
-          // umzuschreiben hieße anderer Host, andere Cookies: lieber ein Knopf,
-          // der genau die Adresse öffnet, die der Hub vergeben hat.
-          if (url.hostname === 'localhost') return <Link key={`link-${p.name}`} href={url.href} label={labelOf(p)} />
-          return (
-            <Box key={`box-${p.name}`} flexDirection="row">
-              <Button
-                key={`open-${p.name}`}
-                label={labelOf(p)}
-                plain
-                onPress={() => void $.process.run(['open', url.href])}
-              />
-              <Text dimColor> {url.host}</Text>
-            </Box>
-          )
-        })}
+      <Box flexDirection="row" gap={2} alignItems="center">
+        {band.worktree !== undefined ? (
+          <Text bold wrap="truncate-end">
+            Worktree{band.worktree ? ` ${band.worktree}` : ''}
+          </Text>
+        ) : null}
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Text color={color}>{band.glyph}</Text>
+          {band.link ? (
+            opener('open-front', band.link)
+          ) : (
+            <Text dimColor wrap="truncate-end">
+              {band.text}
+            </Text>
+          )}
+        </Box>
+        {band.services.map((s) => (
+          <Box key={`svc-${s.name}`} flexDirection="row" gap={1} alignItems="center">
+            {s.href ? opener(`open-${s.name}`, { href: s.href, text: s.name }, true) : <Text dimColor>{s.name}</Text>}
+            <Text color={s.state === 'läuft' ? undefined : s.state === 'fremd' ? 'error' : 'warning'} dimColor={s.state === 'läuft'}>
+              {MARK[s.state]}
+            </Text>
+          </Box>
+        ))}
+        {band.action ? (
+          <Button
+            key={`do-${band.action}`}
+            label={band.action === 'up' ? 'Starten' : 'Neu starten'}
+            variant="primary"
+            onPress={press(band.action)}
+          />
+        ) : null}
+        {band.hub ? opener('open-hub', band.hub, true) : null}
+        {band.main ? (
+          <Text dimColor wrap="truncate-end">
+            Hauptprojekt: {band.main}
+          </Text>
+        ) : null}
       </Box>
     )
   })
@@ -263,13 +341,9 @@ export const register: Register = (on) => {
     if (!explicit && v?.worktreePending && verb !== 'status') {
       if (verb !== 'up') return { text: 'devhub: dieser Worktree läuft noch nicht - erst `/devhub up`.' }
       try {
-        const result = await hubJson<{ name: string; warnings?: unknown[] }>($, '/api/worktrees/up', {
-          method: 'POST',
-          body: { path: v.worktreePath }
-        })
+        const result = await control($, v, 'up')
         const after = await refresh($)
-        const warnings = (result.warnings ?? []).map((w) => `  ⚠ ${typeof w === 'string' ? w : JSON.stringify(w)}`)
-        return { text: [`devhub ${result.name} gestartet`, ...warnings, after ? describe(after) : ''].filter(Boolean).join('\n') }
+        return { text: [`devhub ${result.name} gestartet`, ...result.warnings.map((w) => `  ⚠ ${w}`), after ? describe(after) : ''].filter(Boolean).join('\n') }
       } catch (err) {
         return { text: `devhub up: ${(err as Error).message}` }
       }
@@ -280,12 +354,9 @@ export const register: Register = (on) => {
         case 'up':
         case 'down':
         case 'restart': {
-          const result = await hubJson<{ ok: boolean; warnings?: unknown[] }>($, `/api/projects/${encodeURIComponent(name)}/${verb}`, {
-            method: 'POST',
-            body: { profile }
-          })
+          const result = await control($, { name, profile }, verb)
           const after = await refresh($)
-          const warnings = (result.warnings ?? []).map((w) => `  ⚠ ${typeof w === 'string' ? w : JSON.stringify(w)}`)
+          const warnings = result.warnings.map((w) => `  ⚠ ${w}`)
           const word = verb === 'up' ? 'gestartet' : verb === 'down' ? 'gestoppt' : 'neu gestartet'
           return { text: [`devhub ${name} ${word}`, ...warnings, after && after.name === name ? describe(after) : ''].filter(Boolean).join('\n') }
         }

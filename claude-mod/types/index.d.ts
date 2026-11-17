@@ -28,6 +28,10 @@ export type DevhubView = {
   /** Die Sitzung liegt in einem Worktree, den devhub noch nicht gestartet hat. */
   worktreePending?: boolean
   worktreePath?: string
+  /** Kurzname des Worktrees (meist der Branch), wenn die Sitzung in einem liegt. */
+  worktreeLabel?: string
+  /** Bei einem laufenden Worktree: die Adresse des Hauptprojekts, falls es läuft. */
+  mainUrl?: string
 }
 
 declare module 'claude-code' {
